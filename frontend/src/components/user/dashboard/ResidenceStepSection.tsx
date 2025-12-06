@@ -1,16 +1,10 @@
-import type { ChangeEvent } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
-import type { CreateDocumentInput } from '@/lib/services/documentService';
+import { useIncidentReport } from '@/context/IncidentReportContext';
 
-type InputChangeHandler = <Key extends keyof CreateDocumentInput>(field: Key) => (event: ChangeEvent<HTMLInputElement>) => void;
+export function ResidenceStepSection() {
+  const { incidentDraft, handleInputChange } = useIncidentReport();
 
-type ResidenceStepSectionProps = {
-  draft: CreateDocumentInput;
-  onInputChange: InputChangeHandler;
-};
-
-export function ResidenceStepSection({ draft, onInputChange }: ResidenceStepSectionProps) {
   return (
     <IncidentWizardSection
       title="Adres zamieszkania"
@@ -19,8 +13,8 @@ export function ResidenceStepSection({ draft, onInputChange }: ResidenceStepSect
       <IncidentTextField
         label="Ulica"
         name="ulica"
-        value={draft.ulica ?? ''}
-        onChange={onInputChange('ulica')}
+        value={incidentDraft.ulica ?? ''}
+        onChange={handleInputChange('ulica')}
         optional
         hint="Jeśli adres nie ma numeru, pozostaw pole puste."
       />

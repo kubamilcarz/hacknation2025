@@ -1,19 +1,12 @@
-import type { ChangeEvent } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
 import { InfoTooltip } from '@/components/user/InfoTooltip';
-import type { CreateDocumentInput } from '@/lib/services/documentService';
+import { useIncidentReport } from '@/context/IncidentReportContext';
 
-type TextareaChangeHandler = <Key extends keyof CreateDocumentInput>(field: Key) => (event: ChangeEvent<HTMLTextAreaElement>) => void;
+export function AccidentStepSection() {
+  const { incidentDraft, validationErrors, handleTextareaChange } = useIncidentReport();
 
-type AccidentStepSectionProps = {
-  draft: CreateDocumentInput;
-  validationErrors: Record<string, string>;
-  onTextareaChange: TextareaChangeHandler;
-};
-
-export function AccidentStepSection({ draft, validationErrors, onTextareaChange }: AccidentStepSectionProps) {
   return (
     <IncidentWizardSection
       title="Opis zdarzenia"
@@ -42,8 +35,8 @@ export function AccidentStepSection({ draft, validationErrors, onTextareaChange 
         component="textarea"
         label="Co dokładnie się stało?"
         name="szczegoly_okolicznosci"
-        value={draft.szczegoly_okolicznosci ?? ''}
-        onChange={onTextareaChange('szczegoly_okolicznosci')}
+        value={incidentDraft.szczegoly_okolicznosci ?? ''}
+        onChange={handleTextareaChange('szczegoly_okolicznosci')}
         error={validationErrors.szczegoly_okolicznosci}
         hint="Wpisz czas, miejsce i wykonywane czynności."
         aiSuggestion={

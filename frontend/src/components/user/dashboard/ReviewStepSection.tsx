@@ -1,26 +1,21 @@
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
 import { Spinner } from '@/components/Spinner';
+import { useIncidentReport } from '@/context/IncidentReportContext';
 
-type ReviewStepSectionProps = {
-  hasSubmittedSuccessfully: boolean;
-  submitError: string | null;
-  submittedDocumentId: number | null;
-  canDownload: boolean;
-  isDownloadingDocx: boolean;
-  isDownloadingPdf: boolean;
-  onDownload: (format: 'docx' | 'pdf') => void;
-};
+export function ReviewStepSection() {
+  const {
+    hasSubmittedSuccessfully,
+    submitError,
+    submittedDocumentId,
+    downloadState,
+    handleDownload,
+  } = useIncidentReport();
 
-export function ReviewStepSection({
-  hasSubmittedSuccessfully,
-  submitError,
-  submittedDocumentId,
-  canDownload,
-  isDownloadingDocx,
-  isDownloadingPdf,
-  onDownload,
-}: ReviewStepSectionProps) {
+  const canDownload = submittedDocumentId != null;
+  const isDownloadingDocx = downloadState === 'docx';
+  const isDownloadingPdf = downloadState === 'pdf';
+
   return (
     <IncidentWizardSection
       title="Podsumowanie"
@@ -38,7 +33,7 @@ export function ReviewStepSection({
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={() => onDownload('docx')}
+                onClick={() => void handleDownload('docx')}
                 disabled={!canDownload || isDownloadingDocx}
                 className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -47,7 +42,7 @@ export function ReviewStepSection({
               </button>
               <button
                 type="button"
-                onClick={() => onDownload('pdf')}
+                onClick={() => void handleDownload('pdf')}
                 disabled={!canDownload || isDownloadingPdf}
                 className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
               >
