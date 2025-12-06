@@ -19,10 +19,7 @@ export function ReviewStepSection() {
   const isDownloadingPdf = downloadState === 'pdf';
 
   return (
-    <IncidentWizardSection
-      title="Podsumowanie"
-      description="Sprawdź, czy wszystko wygląda dobrze. W razie potrzeby zawsze możesz wrócić do wcześniejszych kroków."
-    >
+    <IncidentWizardSection>
       {hasSubmittedSuccessfully ? (
         <div className="space-y-4">
           <IncidentAiSuggestion title="Formularz gotowy do pobrania">

@@ -6,10 +6,7 @@ export function ResidenceStepSection() {
   const { incidentDraft, handleInputChange } = useIncidentReport();
 
   return (
-    <IncidentWizardSection
-      title="Adres korespondencyjny"
-      description="Podaj adres, pod który możemy wysłać korespondencję. Jeśli mieszkasz za granicą, zostaw ostatni adres w Polsce."
-    >
+    <IncidentWizardSection>
       <IncidentTextField
         label="Ulica"
         name="ulica"

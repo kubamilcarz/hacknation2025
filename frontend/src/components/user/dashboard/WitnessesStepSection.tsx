@@ -47,8 +47,6 @@ export function WitnessesStepSection() {
 
   return (
     <IncidentWizardSection
-      title="Świadkowie"
-      description="Dodaj osoby, które mogą potwierdzić zdarzenie. Jeśli nikogo nie było na miejscu, po prostu przejdź dalej."
       actions={
         <button
           type="button"

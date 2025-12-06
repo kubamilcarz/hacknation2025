@@ -6,10 +6,7 @@ export function IdentityStepSection() {
   const { incidentDraft, validationErrors, handleInputChange } = useIncidentReport();
 
   return (
-    <IncidentWizardSection
-      title="Twoje podstawowe dane"
-      description="Dodaj informacje o sobie. Jeśli czegoś teraz nie masz, możesz wrócić do pola później."
-    >
+    <IncidentWizardSection>
       <IncidentTextField
         label="PESEL"
         name="pesel"

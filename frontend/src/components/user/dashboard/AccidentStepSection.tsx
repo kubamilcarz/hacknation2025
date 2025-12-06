@@ -9,8 +9,6 @@ export function AccidentStepSection() {
 
   return (
     <IncidentWizardSection
-      title="Opis zdarzenia"
-      description="Opowiedz w kilku zdaniach, co się wydarzyło. Własne słowa w zupełności wystarczą."
       actions={
         <InfoTooltip label="Na co zwraca uwagę ZUS?">
           <div className="space-y-2">
