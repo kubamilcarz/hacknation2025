@@ -18,11 +18,29 @@ const STEPS: IncidentWizardStep[] = [
     id: 'identity',
     title: 'Twoje dane',
     description: 'Uzupełnij podstawowe informacje o sobie. W razie czego zawsze możesz do nich wrócić.',
+    info: {
+      label: 'Dlaczego prosimy o dane?',
+      content: (
+        <div className="space-y-2">
+          <p>Te informacje pozwolą ZUS powiązać zgłoszenie z Twoim kontem i uniknąć dodatkowych wyjaśnień.</p>
+          <p>Jeśli nie masz czegoś pod ręką, zostaw pole puste — kreator przypomni o nim przy kolejnej wizycie.</p>
+        </div>
+      ),
+    },
   },
   {
     id: 'residence',
     title: 'Adres zamieszkania',
     description: 'Podaj adres, pod który możemy kierować korespondencję.',
+    info: {
+      label: 'Adres korespondencyjny',
+      content: (
+        <div className="space-y-2">
+          <p>Na ten adres ZUS wyśle decyzję lub prośbę o uzupełnienia. Możesz wskazać dowolne miejsce, w którym odbierasz pocztę.</p>
+          <p>Jeżeli mieszkasz poza Polską, wpisz ostatni krajowy adres — to ułatwi dalszą obsługę sprawy.</p>
+        </div>
+      ),
+    },
   },
   {
     id: 'accident',
@@ -34,11 +52,29 @@ const STEPS: IncidentWizardStep[] = [
     title: 'Świadkowie',
     description: 'Dodaj osoby, które mogą potwierdzić zdarzenie (jeśli takie są).',
     isOptional: true,
+    info: {
+      label: 'Po co świadkowie?',
+      content: (
+        <div className="space-y-2">
+          <p>Świadek pomaga potwierdzić przebieg wypadku. Wpisz dane osób obecnych na miejscu lub tych, które znają sytuację.</p>
+          <p>Jeżeli nie było świadków, przejdź dalej — zgłoszenie nadal będzie kompletne.</p>
+        </div>
+      ),
+    },
   },
   {
     id: 'review',
     title: 'Podsumowanie',
     description: 'Rzuć okiem na całość przed przygotowaniem formularza.',
+    info: {
+      label: 'Co dalej?',
+      content: (
+        <div className="space-y-2">
+          <p>Na tym etapie przygotujesz pliki do pobrania. System niczego nie wysyła bez Twojej decyzji.</p>
+          <p>Po pobraniu formularza dołącz załączniki i złóż komplet dokumentów w ZUS lub przez ePUAP.</p>
+        </div>
+      ),
+    },
   },
 ];
 

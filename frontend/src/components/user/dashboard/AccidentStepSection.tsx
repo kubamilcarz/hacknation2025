@@ -1,33 +1,13 @@
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
-import { InfoTooltip } from '@/components/user/InfoTooltip';
 import { useIncidentReport } from '@/context/IncidentReportContext';
 
 export function AccidentStepSection() {
   const { incidentDraft, validationErrors, handleTextareaChange } = useIncidentReport();
 
   return (
-    <IncidentWizardSection
-      actions={
-        <InfoTooltip label="Na co zwraca uwagę ZUS?">
-          <div className="space-y-2">
-            <p>
-              Przy ocenie zgłoszenia eksperci sprawdzają, czy w opisie pojawiają się następujące elementy. Potraktuj je jako listę kontrolną:
-            </p>
-            <ul className="list-disc space-y-1 pl-4">
-              <li>Nagłość zdarzenia – krótki, nieplanowany przebieg.</li>
-              <li>Przyczyna zewnętrzna – wpływ osoby, sprzętu lub warunków otoczenia.</li>
-              <li>Uraz – co dokładnie ucierpiało.</li>
-              <li>Związek z wykonywaną pracą – co robiłeś, gdy to się stało.</li>
-            </ul>
-            <p className="text-xs text-muted">
-              Nie potrzebujesz długiego opisu – krótka wzmianka przy każdym punkcie ułatwi szybką decyzję.
-            </p>
-          </div>
-        </InfoTooltip>
-      }
-    >
+    <IncidentWizardSection>
       <IncidentTextField
         component="textarea"
         label="Co dokładnie się stało?"

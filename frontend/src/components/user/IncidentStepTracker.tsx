@@ -1,10 +1,16 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export interface IncidentWizardStep {
   id: string;
   title: string;
   description?: string;
   isOptional?: boolean;
+  info?: {
+    label: string;
+    content: ReactNode;
+  };
 }
 
 interface IncidentStepTrackerProps {

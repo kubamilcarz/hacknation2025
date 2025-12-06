@@ -65,6 +65,7 @@ function UserDashboardContent() {
           stepCount={steps.length}
           title={currentStep.title}
           description={currentStep.description}
+          info={currentStep.info}
         >
           <div className="space-y-10">
             {currentStep.id === 'identity' && <IdentityStepSection />}
