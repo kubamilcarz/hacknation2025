@@ -95,6 +95,13 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
   }, [pageSize]);
 
   useEffect(() => {
+    const shouldSkipInitialLoad =
+      typeof window !== "undefined" && window.location.search.length > 1;
+
+    if (shouldSkipInitialLoad) {
+      return;
+    }
+
     void loadIncidents();
   }, [loadIncidents]);
 

@@ -18,6 +18,7 @@ import { type Incident, type IncidentPriority, type IncidentStatus } from '@/typ
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import Footer from '@/components/Footer';
 import { Pagination } from '@/components/Pagination';
+import Modal from '@/components/Modal';
 
 const VALID_STATUS_VALUES: IncidentStatus[] = ['pending', 'in-progress', 'resolved', 'rejected'];
 
@@ -101,6 +102,16 @@ export default function EmployeeDashboard() {
   } = incidentsContext;
   const totalCount = incidentsContext.totalCount;
   const hasLoaded = incidentsContext.hasLoaded;
+  const recordLabel = useMemo(() => {
+    if (totalCount === 1) {
+      return 'zgłoszenie';
+    }
+    if (totalCount >= 2 && totalCount <= 4) {
+      return 'zgłoszenia';
+    }
+    return 'zgłoszeń';
+  }, [totalCount]);
+  const hasIncidentsToExport = totalCount > 0;
   const statusParam = searchParams.get('status');
   const initialFilterStatus: IncidentStatus | 'all' = isIncidentStatusValue(statusParam) ? statusParam : 'all';
   const initialSearchTerm = searchParams.get('search') ?? '';
@@ -110,10 +121,20 @@ export default function EmployeeDashboard() {
     initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
   );
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleCreateIncident = useCallback(() => {
     router.push('/dashboard/employee/new');
   }, [router]);
+
+  const handleOpenExportModal = useCallback(() => {
+    setIsExportModalOpen(true);
+  }, []);
+
+  const handleCloseExportModal = useCallback(() => {
+    setIsExportModalOpen(false);
+  }, []);
 
   const getStatusBadge = useCallback((status: IncidentStatus) => {
     const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium';
@@ -465,6 +486,7 @@ export default function EmployeeDashboard() {
     const rawSearchParam = params.get('search');
     const normalizedSearch = rawSearchParam?.trim() ?? '';
     const searchOption = normalizedSearch.length > 0 ? normalizedSearch : null;
+    searchCommittedValueRef.current = searchOption;
 
     const statusParam = params.get('status');
     if (statusParam && statusParam !== 'all' && !isIncidentStatusValue(statusParam)) {
@@ -519,7 +541,7 @@ export default function EmployeeDashboard() {
       const normalized = nextValue.trim();
       const canonical = normalized.length > 0 ? normalized : null;
       if (searchCommittedValueRef.current === canonical) {
-        return;
+        return false;
       }
 
       searchCommittedValueRef.current = canonical;
@@ -528,6 +550,7 @@ export default function EmployeeDashboard() {
         search: canonical,
         page: null,
       });
+      return true;
     },
     [commitQueryParams, searchTerm]
   );
@@ -549,8 +572,11 @@ export default function EmployeeDashboard() {
 
   const handlePageChange = useCallback(
     (page: number) => {
-      commitSearchTerm();
+      const searchChanged = commitSearchTerm();
       setOpenActionMenuId(null);
+      if (searchChanged) {
+        return;
+      }
       const normalizedTarget = Math.max(1, Math.min(totalPages, Math.floor(page)));
       const desiredValue = normalizedTarget <= 1 ? null : String(normalizedTarget);
       const currentValue = rawPageParam ?? null;
@@ -742,6 +768,20 @@ export default function EmployeeDashboard() {
     }
   }, [formatDate, totalCount]);
 
+  const handleConfirmExport = useCallback(async () => {
+    if (isExporting || totalCount === 0) {
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      await handleExportCsv();
+      setIsExportModalOpen(false);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [handleExportCsv, isExporting, totalCount]);
+
   const handleSort = useCallback(
     (columnId: string) => {
       const column = columns.find((entry) => entry.id === columnId && entry.sortable);
@@ -888,8 +928,9 @@ export default function EmployeeDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-app py-8">
-      <div className="mx-auto w-full max-w-6xl px-6">
+    <>
+      <div className="min-h-screen bg-app py-8">
+        <div className="mx-auto w-full max-w-6xl px-6">
         <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
           <div className="mb-8 flex flex-col gap-4">
             <Breadcrumbs
@@ -928,7 +969,7 @@ export default function EmployeeDashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportCsv}
+                  onClick={handleOpenExportModal}
                   className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle bg-surface px-5 py-2.5 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                 >
                   <svg
@@ -1168,5 +1209,85 @@ export default function EmployeeDashboard() {
         <Footer router={router} showPanelButton={false} />
       </div>
     </div>
+
+      <Modal
+        isOpen={isExportModalOpen}
+        onClose={handleCloseExportModal}
+        title="Eksportuj listę zgłoszeń"
+        description={`Obecny widok zawiera ${totalCount} ${recordLabel}. Eksport obejmie aktywne filtry i sortowanie.`}
+      >
+        <div className="space-y-6">
+          <div className="rounded-xl border border-subtle bg-surface-subdued px-5 py-4 text-sm text-secondary">
+            <div className="flex items-center justify-between text-base font-semibold text-primary">
+              <span>Zakres eksportu</span>
+              <span>{totalCount}</span>
+            </div>
+            <p className="mt-3">
+              Plik CSV zachowa aktualne kryteria wyszukiwania, statusy i bieżące ustawienia sortowania.
+            </p>
+            {!hasIncidentsToExport && (
+              <p className="mt-3 font-medium text-(--color-error)">
+                Brak zgłoszeń spełniających bieżące kryteria.
+              </p>
+            )}
+          </div>
+          <div className="space-y-2 rounded-xl border border-dashed border-subtle px-5 py-4 text-sm text-secondary">
+            <p className="flex items-center gap-2">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-(--color-accent-soft) text-(--color-accent)">
+                <svg
+                  className="h-3 w-3"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10" />
+                  <path d="m8 3 5 5-5 5" />
+                </svg>
+              </span>
+              Operacja może potrwać chwilę przy większej liczbie rekordów.
+            </p>
+            <p className="flex items-center gap-2">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-(--color-accent-soft) text-(--color-accent)">
+                <svg
+                  className="h-3 w-3"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14" />
+                  <path d="m5 12 7-7 7 7" />
+                </svg>
+              </span>
+              Po zakończeniu pobieranie rozpocznie się automatycznie.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={handleCloseExportModal}
+              className="inline-flex items-center justify-center rounded-md border border-subtle px-5 py-2.5 text-sm font-semibold text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+            >
+              Anuluj
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmExport}
+              disabled={!hasIncidentsToExport || isExporting}
+              className={`inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold text-(--color-accent-text) transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${!hasIncidentsToExport || isExporting ? 'bg-(--color-border) text-muted' : 'bg-(--color-accent) hover:bg-(--color-accent-strong)'}`}
+            >
+              {isExporting ? 'Przygotowuję plik…' : 'Eksportuj CSV'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }

@@ -14,7 +14,7 @@ const labelTranslations: Record<string, string> = {
   'report-incident': 'Zgłoszenie zdarzenia',
   panel: 'Panel weryfikacji',
   'incident-list': 'Lista zgłoszeń',
-  report: 'Zgłoszenie',
+  report: 'Dodaj zgłoszenie',
 };
 
 function resolveLabel(item: BreadcrumbItem) {
