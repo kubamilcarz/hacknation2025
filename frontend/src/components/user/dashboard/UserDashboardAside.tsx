@@ -3,11 +3,11 @@ import { IncidentInfoCard } from '@/components/user/IncidentInfoCard';
 export function UserDashboardAside() {
   return (
     <>
-      <IncidentInfoCard title="Co się zmieni?">
-        Tu pojawią się informacje kontekstowe zależne od etapu, np. checklista dokumentów do zebrania lub status autozapisu.
+      <IncidentInfoCard title="Dlaczego to ważne?">
+        Każda wprowadzona informacja trafia bezpośrednio do zespołu analizującego zgłoszenie i pomaga szybciej podjąć decyzję.
       </IncidentInfoCard>
-      <IncidentInfoCard title="Wskazówki od mentorów">
-        Dzięki integracji z zespołem ZUS możemy dołączać wskazówki dotyczące poprawnego wypełniania formularza.
+      <IncidentInfoCard title="Masz pytania?">
+        Jeśli potrzebujesz wsparcia przy uzupełnianiu formularza, skontaktuj się z infolinią ZUS lub swoim opiekunem sprawy.
       </IncidentInfoCard>
     </>
   );

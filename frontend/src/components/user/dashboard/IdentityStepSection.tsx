@@ -15,7 +15,7 @@ export function IdentityStepSection({ draft, validationErrors, onInputChange }: 
   return (
     <IncidentWizardSection
       title="Tożsamość osoby poszkodowanej"
-      description="Dane służą do jednoznacznego zidentyfikowania osoby w systemach ZUS."
+      description="Wpisz dane osoby poszkodowanej."
     >
       <IncidentTextField
         label="PESEL"
@@ -24,7 +24,7 @@ export function IdentityStepSection({ draft, validationErrors, onInputChange }: 
         maxLength={11}
         onChange={onInputChange('pesel')}
         error={validationErrors.pesel}
-        hint="11 cyfr, bez spacji. System później zweryfikuje poprawność numeru."
+        hint="Wpisz 11 cyfr bez spacji."
       />
       <IncidentTextField
         label="Numer dokumentu tożsamości"
@@ -32,7 +32,7 @@ export function IdentityStepSection({ draft, validationErrors, onInputChange }: 
         value={draft.nr_dowodu ?? ''}
         onChange={onInputChange('nr_dowodu')}
         error={validationErrors.nr_dowodu}
-        hint="Najczęściej dowód osobisty. Możesz podać paszport, jeśli przebywasz za granicą."
+        hint="Przepisz numer, np. ABC123456."
       />
       <IncidentTextField
         label="Imię"
@@ -54,7 +54,7 @@ export function IdentityStepSection({ draft, validationErrors, onInputChange }: 
         value={draft.numer_telefonu ?? ''}
         optional
         onChange={onInputChange('numer_telefonu')}
-        hint="Przyspiesza kontakt w razie dodatkowych pytań."
+        hint="Ułatwia szybki kontakt."
       />
     </IncidentWizardSection>
   );

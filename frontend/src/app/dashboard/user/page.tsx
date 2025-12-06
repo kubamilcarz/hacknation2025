@@ -28,28 +28,28 @@ const steps: IncidentWizardStep[] = [
   {
     id: 'identity',
     title: 'Dane poszkodowanego',
-    description: 'Imię, nazwisko oraz numery identyfikacyjne osoby, która uległa wypadkowi.',
+    description: 'Podaj podstawowe dane osoby poszkodowanej.',
   },
   {
     id: 'residence',
     title: 'Adres zamieszkania',
-    description: 'Aktualne miejsce zamieszkania oraz dane korespondencyjne.',
+    description: 'Uzupełnij adres do korespondencji.',
   },
   {
     id: 'accident',
     title: 'Opis zdarzenia',
-    description: 'Kluczowe fakty o wypadku: data, miejsce i okoliczności.',
+    description: 'Napisz kiedy i gdzie doszło do wypadku.',
   },
   {
     id: 'witnesses',
     title: 'Świadkowie',
-    description: 'Dane kontaktowe osób, które widziały zdarzenie.',
+    description: 'Dodaj osoby, które widziały zdarzenie.',
     isOptional: true,
   },
   {
     id: 'review',
     title: 'Podsumowanie',
-    description: 'Sprawdź zebrane informacje przed wysłaniem.',
+    description: 'Sprawdź dane przed wysłaniem.',
   },
 ];
 
@@ -152,7 +152,7 @@ const isIncidentFieldKey = (field: keyof CreateDocumentInput): field is Incident
   incidentFieldKeySet.has(field as IncidentFieldKey);
 
 // Debug helper: flip to true when we need to bypass validation while iterating on UI.
-const letUserProceedWithEmptyFields = false;
+const letUserProceedWithEmptyFields = true;
 
 const createInitialIncidentDraft = (): CreateDocumentInput => ({
   ...defaultDocumentData,
@@ -177,6 +177,7 @@ export default function UserDashboard() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
 
   const currentStep = useMemo(() => steps[currentStepIndex] ?? steps[0], [currentStepIndex]);
@@ -277,6 +278,7 @@ export default function UserDashboard() {
 
       if (shouldResetError) {
         setSubmitError(null);
+        setSubmittedDocumentId(null);
       }
     };
 
@@ -423,6 +425,7 @@ export default function UserDashboard() {
 
     setSubmitState('submitting');
     setSubmitError(null);
+    setSubmittedDocumentId(null);
 
     try {
       const sanitizedWitnesses = (incidentDraft.witnesses ?? [])
@@ -445,7 +448,8 @@ export default function UserDashboard() {
         szczegoly_okolicznosci: (incidentDraft.szczegoly_okolicznosci ?? '').trim(),
       };
 
-      await createDocument(payload);
+      const createdDocument = await createDocument(payload);
+      setSubmittedDocumentId(createdDocument.id ?? null);
       setSubmitState('success');
     } catch (error) {
       console.error(error);
@@ -501,8 +505,7 @@ export default function UserDashboard() {
           <div>
             <h1 className="text-3xl font-semibold text-primary">Zgłoś zdarzenie</h1>
             <p className="mt-2 max-w-3xl text-sm text-muted">
-              Poniższa wersja prezentuje wczesny podgląd komponentów kreatora. Docelowo każdy krok zostanie
-              połączony z pełnym schematem danych oraz walidacją.
+              Wypełnij kolejne kroki, aby przekazać nam komplet informacji o wypadku. Na każdym etapie podpowiemy, jakie dane są potrzebne.
             </p>
           </div>
         </div>
@@ -561,6 +564,7 @@ export default function UserDashboard() {
               <ReviewStepSection
                 hasSubmittedSuccessfully={hasSubmittedSuccessfully}
                 submitError={submitError}
+                submittedDocumentId={submittedDocumentId}
               />
             )}
           </div>

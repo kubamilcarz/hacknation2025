@@ -17,7 +17,7 @@ export function AccidentStepSection({ draft, validationErrors, onTextareaChange 
   return (
     <IncidentWizardSection
       title="Opis zdarzenia"
-      description="Szczegółowy opis pomaga ekspertom ZUS właściwie zakwalifikować zgłoszenie."
+      description="Opisz przebieg wypadku."
       actions={
         <InfoTooltip label="Dlaczego o to pytamy?">
           <div className="space-y-2">
@@ -45,10 +45,10 @@ export function AccidentStepSection({ draft, validationErrors, onTextareaChange 
         value={draft.szczegoly_okolicznosci ?? ''}
         onChange={onTextareaChange('szczegoly_okolicznosci')}
         error={validationErrors.szczegoly_okolicznosci}
-        hint="Uwzględnij czas, miejsce, wykonywane czynności i używane maszyny."
+        hint="Wpisz czas, miejsce i wykonywane czynności."
         aiSuggestion={
           <IncidentAiSuggestion>
-            Podaj fakty: <strong>gdzie</strong>, <strong>kiedy</strong>, <strong>jak</strong> i <strong>dlaczego</strong> doszło do zdarzenia. Jeśli byli świadkowie lub używaliście maszyn, zapisz ich nazwy i numery seryjne.
+            Napisz krótko: <strong>gdzie</strong>, <strong>kiedy</strong>, <strong>co robiłeś</strong> i <strong>co spowodowało</strong> zdarzenie. Dodaj świadków i użyty sprzęt.
           </IncidentAiSuggestion>
         }
       />

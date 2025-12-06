@@ -14,7 +14,7 @@ export function ResidenceStepSection({ draft, onInputChange }: ResidenceStepSect
   return (
     <IncidentWizardSection
       title="Adres zamieszkania"
-      description="Aktualny adres zamieszkania poszkodowanego. Jeżeli mieszkasz za granicą, w kolejnym kroku poprosimy o ostatni adres w Polsce."
+      description="Podaj aktualny adres poszkodowanego. Jeśli mieszkasz za granicą, wpisz ostatni adres w Polsce."
     >
       <IncidentTextField
         label="Ulica"
@@ -22,7 +22,7 @@ export function ResidenceStepSection({ draft, onInputChange }: ResidenceStepSect
         value={draft.ulica ?? ''}
         onChange={onInputChange('ulica')}
         optional
-        hint="Pola adresowe zostaną zasilone danymi z bazy Poczty Polskiej w kolejnej iteracji."
+        hint="Jeśli adres nie ma numeru, pozostaw pole puste."
       />
     </IncidentWizardSection>
   );
