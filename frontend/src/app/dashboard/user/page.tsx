@@ -71,6 +71,8 @@ const createInitialIncidentDraft = (): CreateDocumentInput => ({
 export default function UserDashboard() {
   const { createDocument } = useDocuments();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [furthestStepIndex, setFurthestStepIndex] = useState(0);
+
   // Shared document draft keeps every field centralized for validation and submission.
   const [incidentDraft, setIncidentDraft] = useState<CreateDocumentInput>(createInitialIncidentDraft);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -182,9 +184,7 @@ export default function UserDashboard() {
   };
 
   const handleSubmit = async () => {
-    if (hasSubmittedSuccessfully || isSubmitting) {
-      return;
-    }
+  
 
     setSubmitState('submitting');
     setSubmitError(null);
@@ -215,7 +215,21 @@ export default function UserDashboard() {
       return;
     }
 
-    setCurrentStepIndex((index) => Math.min(steps.length - 1, index + 1));
+    setCurrentStepIndex((index) => {
+      const nextIndex = Math.min(steps.length - 1, index + 1);
+      setFurthestStepIndex((previousHighest) => Math.max(previousHighest, nextIndex));
+      return nextIndex;
+    });
+  };
+
+  const handleStepSelect = (stepId: string) => {
+    const targetIndex = steps.findIndex((step) => step.id === stepId);
+    if (targetIndex === -1 || targetIndex === currentStepIndex || targetIndex > furthestStepIndex) {
+      return;
+    }
+
+    setCurrentStepIndex(targetIndex);
+    setFurthestStepIndex((previousHighest) => Math.max(previousHighest, targetIndex));
   };
 
   const renderAside = () => (
@@ -251,7 +265,12 @@ export default function UserDashboard() {
 
         <div className="mb-8 space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Postęp zgłoszenia</p>
-          <IncidentStepTracker steps={steps} currentStepId={currentStep.id} />
+          <IncidentStepTracker
+            steps={steps}
+            currentStepId={currentStep.id}
+            maxAccessibleStepIndex={furthestStepIndex}
+            onStepSelect={handleStepSelect}
+          />
         </div>
 
         <IncidentWizardLayout
