@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { IncidentWizardLayout } from '@/components/user/IncidentWizardLayout';
 import { IncidentStepTracker } from '@/components/user/IncidentStepTracker';
@@ -10,6 +11,9 @@ import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
 import { IncidentWizardNavigation } from '@/components/user/IncidentWizardNavigation';
 import { IncidentInfoCard } from '@/components/user/IncidentInfoCard';
 import type { IncidentWizardStep } from '@/components/user/IncidentStepTracker';
+import { useDocuments } from '@/context/DocumentContext';
+import { defaultDocumentData } from '@/lib/mock-documents';
+import type { CreateDocumentInput } from '@/lib/services/documentService';
 
 const steps: IncidentWizardStep[] = [
   {
@@ -40,27 +44,177 @@ const steps: IncidentWizardStep[] = [
   },
 ];
 
+// Debug helper: flip to true when we need to bypass validation while iterating on UI.
+const letUserProceedWithEmptyFields = false;
+
+const REQUIRED_FIELDS_BY_STEP: Record<IncidentWizardStep['id'], string[]> = {
+  identity: ['pesel', 'nr_dowodu', 'imie', 'nazwisko'],
+  residence: [],
+  accident: ['szczegoly_okolicznosci'],
+  witnesses: [],
+  review: [],
+};
+
+const createInitialIncidentDraft = (): CreateDocumentInput => ({
+  ...defaultDocumentData,
+  id: undefined,
+  pesel: '',
+  nr_dowodu: '',
+  imie: '',
+  nazwisko: '',
+  numer_telefonu: '',
+  ulica: '',
+  szczegoly_okolicznosci: '',
+  witnesses: [],
+});
+
 export default function UserDashboard() {
+  const { createDocument } = useDocuments();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [identityData, setIdentityData] = useState({
-    pesel: '',
-    nr_dowodu: '',
-    imie: '',
-    nazwisko: '',
-    numer_telefonu: '',
-  });
-  const [accidentNarrative, setAccidentNarrative] = useState('');
-  const [residenceData, setResidenceData] = useState({
-    ulica: '',
-  });
+  // Shared document draft keeps every field centralized for validation and submission.
+  const [incidentDraft, setIncidentDraft] = useState<CreateDocumentInput>(createInitialIncidentDraft);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const clearFieldError = (fieldName: string) => {
+    setValidationErrors((prev) => {
+      if (!(fieldName in prev)) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+  };
+
+  const updateDraftField = <Key extends keyof CreateDocumentInput>(field: Key) =>
+    (value: CreateDocumentInput[Key]) => {
+      setIncidentDraft((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+      clearFieldError(field as string);
+      let shouldResetError = false;
+      setSubmitState((current) => {
+        if (current === 'submitting') {
+          return current;
+        }
+
+        if (current !== 'idle') {
+          shouldResetError = true;
+        }
+
+        return 'idle';
+      });
+      if (shouldResetError) {
+        setSubmitError(null);
+      }
+    };
+
+  const handleInputChange = <Key extends keyof CreateDocumentInput>(field: Key) =>
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const rawValue = event.target.value;
+      const nextValue = (field === 'nr_dowodu' ? rawValue.toUpperCase() : rawValue) as CreateDocumentInput[Key];
+      updateDraftField(field)(nextValue);
+    };
+
+  const handleTextareaChange = <Key extends keyof CreateDocumentInput>(field: Key) =>
+    (event: ChangeEvent<HTMLTextAreaElement>) => {
+      updateDraftField(field)(event.target.value as CreateDocumentInput[Key]);
+    };
 
   const currentStep = useMemo(() => steps[currentStepIndex] ?? steps[0], [currentStepIndex]);
+
+  const fieldValueLookup: Record<string, string> = {
+    pesel: incidentDraft.pesel ?? '',
+    nr_dowodu: incidentDraft.nr_dowodu ?? '',
+    imie: incidentDraft.imie ?? '',
+    nazwisko: incidentDraft.nazwisko ?? '',
+    numer_telefonu: incidentDraft.numer_telefonu ?? '',
+    ulica: incidentDraft.ulica ?? '',
+    szczegoly_okolicznosci: incidentDraft.szczegoly_okolicznosci ?? '',
+  };
+
+  const getMissingFields = (stepId: IncidentWizardStep['id']) => {
+    const requiredFields = REQUIRED_FIELDS_BY_STEP[stepId] ?? [];
+    return requiredFields.filter((fieldName) => {
+      const value = fieldValueLookup[fieldName];
+      return !value || value.trim().length === 0;
+    });
+  };
+
+  const missingFieldsForCurrentStep = getMissingFields(currentStep.id);
+  const isCurrentStepValid = missingFieldsForCurrentStep.length === 0;
+  const hasNextStep = currentStepIndex < steps.length - 1;
+  const isLastStep = currentStepIndex === steps.length - 1;
+  const isSubmitting = submitState === 'submitting';
+  const hasSubmittedSuccessfully = submitState === 'success';
+  const canAdvance = isLastStep
+    ? !isSubmitting && !hasSubmittedSuccessfully
+    : hasNextStep && (letUserProceedWithEmptyFields || isCurrentStepValid);
 
   const handleBack = () => {
     setCurrentStepIndex((index) => Math.max(0, index - 1));
   };
 
+  const handleValidationGate = () => {
+    if (letUserProceedWithEmptyFields) {
+      return true;
+    }
+
+    const missingFields = getMissingFields(currentStep.id);
+    if (missingFields.length === 0) {
+      return true;
+    }
+
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      missingFields.forEach((fieldName) => {
+        if (!next[fieldName]) {
+          next[fieldName] = 'To pole jest wymagane.';
+        }
+      });
+      return next;
+    });
+    return false;
+  };
+
+  const handleSubmit = async () => {
+    if (hasSubmittedSuccessfully || isSubmitting) {
+      return;
+    }
+
+    setSubmitState('submitting');
+    setSubmitError(null);
+
+    try {
+      const payload: CreateDocumentInput = {
+        ...incidentDraft,
+        witnesses: incidentDraft.witnesses ?? [],
+        szczegoly_okolicznosci: (incidentDraft.szczegoly_okolicznosci ?? '').trim(),
+      };
+
+      await createDocument(payload);
+      setSubmitState('success');
+    } catch (error) {
+      console.error(error);
+      setSubmitState('error');
+      setSubmitError('Nie udało się wysłać zgłoszenia. Spróbuj ponownie.');
+    }
+  };
+
   const handleNext = () => {
+    if (isLastStep) {
+      void handleSubmit();
+      return;
+    }
+
+    if (!handleValidationGate()) {
+      return;
+    }
+
     setCurrentStepIndex((index) => Math.min(steps.length - 1, index + 1));
   };
 
@@ -116,36 +270,40 @@ export default function UserDashboard() {
                 <IncidentTextField
                   label="PESEL"
                   name="pesel"
-                  value={identityData.pesel}
+                  value={incidentDraft.pesel ?? ''}
                   maxLength={11}
-                  onChange={(event) => setIdentityData((prev) => ({ ...prev, pesel: event.target.value }))}
+                  onChange={handleInputChange('pesel')}
+                  error={validationErrors.pesel}
                   hint="11 cyfr, bez spacji. System później zweryfikuje poprawność numeru."
                 />
                 <IncidentTextField
                   label="Numer dokumentu tożsamości"
                   name="nr_dowodu"
-                  value={identityData.nr_dowodu}
-                  onChange={(event) => setIdentityData((prev) => ({ ...prev, nr_dowodu: event.target.value.toUpperCase() }))}
+                  value={incidentDraft.nr_dowodu ?? ''}
+                  onChange={handleInputChange('nr_dowodu')}
+                  error={validationErrors.nr_dowodu}
                   hint="Najczęściej dowód osobisty. Możesz podać paszport, jeśli przebywasz za granicą."
                 />
                 <IncidentTextField
                   label="Imię"
                   name="imie"
-                  value={identityData.imie}
-                  onChange={(event) => setIdentityData((prev) => ({ ...prev, imie: event.target.value }))}
+                  value={incidentDraft.imie ?? ''}
+                  onChange={handleInputChange('imie')}
+                  error={validationErrors.imie}
                 />
                 <IncidentTextField
                   label="Nazwisko"
                   name="nazwisko"
-                  value={identityData.nazwisko}
-                  onChange={(event) => setIdentityData((prev) => ({ ...prev, nazwisko: event.target.value }))}
+                  value={incidentDraft.nazwisko ?? ''}
+                  onChange={handleInputChange('nazwisko')}
+                  error={validationErrors.nazwisko}
                 />
                 <IncidentTextField
                   label="Telefon kontaktowy"
                   name="numer_telefonu"
-                  value={identityData.numer_telefonu}
+                  value={incidentDraft.numer_telefonu ?? ''}
                   optional
-                  onChange={(event) => setIdentityData((prev) => ({ ...prev, numer_telefonu: event.target.value }))}
+                  onChange={handleInputChange('numer_telefonu')}
                   hint="Przyspiesza kontakt w razie dodatkowych pytań."
                 />
               </IncidentWizardSection>
@@ -160,8 +318,9 @@ export default function UserDashboard() {
                   component="textarea"
                   label="Co dokładnie się stało?"
                   name="szczegoly_okolicznosci"
-                  value={accidentNarrative}
-                  onChange={(event) => setAccidentNarrative(event.target.value)}
+                  value={incidentDraft.szczegoly_okolicznosci ?? ''}
+                  onChange={handleTextareaChange('szczegoly_okolicznosci')}
+                  error={validationErrors.szczegoly_okolicznosci}
                   hint="Uwzględnij czas, miejsce, wykonywane czynności i używane maszyny."
                   aiSuggestion={
                     <IncidentAiSuggestion>
@@ -199,8 +358,8 @@ export default function UserDashboard() {
                 <IncidentTextField
                   label="Ulica"
                   name="ulica"
-                  value={residenceData.ulica}
-                  onChange={(event) => setResidenceData((prev) => ({ ...prev, ulica: event.target.value }))}
+                  value={incidentDraft.ulica ?? ''}
+                  onChange={handleInputChange('ulica')}
                   optional
                   hint="Pola adresowe zostaną zasilone danymi z bazy Poczty Polskiej w kolejnej iteracji."
                 />
@@ -212,19 +371,37 @@ export default function UserDashboard() {
                 title="Podsumowanie"
                 description="Pokazujemy zebrane dane w formie do szybkiej weryfikacji."
               >
-                <IncidentAiSuggestion>
-                  W finalnej wersji kreator zrenderuje tutaj listę wszystkich sekcji wraz z możliwością szybkiej edycji.
-                </IncidentAiSuggestion>
+                {hasSubmittedSuccessfully ? (
+                  <IncidentAiSuggestion title="Zgłoszenie wysłane">
+                    Twój szkic został przesłany do systemu. Możesz wrócić do poprzednich kroków, by wprowadzić korekty lub zamknąć
+                    kreator.
+                  </IncidentAiSuggestion>
+                ) : (
+                  <IncidentAiSuggestion>
+                    W finalnej wersji kreator zrenderuje tutaj listę wszystkich sekcji wraz z możliwością szybkiej edycji.
+                    Zatwierdzając, utworzysz pojedynczy dokument na podstawie zgromadzonych danych.
+                  </IncidentAiSuggestion>
+                )}
+                {submitError && (
+                  <IncidentAiSuggestion title="Błąd zapisu" variant="warning">
+                    {submitError}
+                  </IncidentAiSuggestion>
+                )}
               </IncidentWizardSection>
             )}
           </div>
 
           <IncidentWizardNavigation
+            isSubmitting={isSubmitting}
             canGoBack={currentStepIndex > 0}
-            canGoNext={currentStepIndex < steps.length - 1}
+            canGoNext={canAdvance}
             onBack={handleBack}
             onNext={handleNext}
-            nextLabel={currentStepIndex === steps.length - 1 ? 'Zakończ podgląd' : 'Dalej'}
+            nextLabel={currentStepIndex === steps.length - 1
+              ? hasSubmittedSuccessfully
+                ? 'Wysłano'
+                : 'Wyślij zgłoszenie'
+              : 'Dalej'}
           />
         </IncidentWizardLayout>
       </div>
