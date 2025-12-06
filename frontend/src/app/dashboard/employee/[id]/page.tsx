@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
+import { incidentService } from '@/lib/services/incidentService';
 import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 
@@ -26,9 +27,9 @@ interface IncidentDetailPageProps {
 
 export default function IncidentDetail({ params }: IncidentDetailPageProps) {
   const router = useRouter();
-  const { incidents, isLoading, updateIncident, getIncidentById } = useIncidents();
+  const { isLoading, updateIncident, getIncidentById } = useIncidents();
 
-  const incidentFromStore = useMemo(() => getIncidentById(params.id), [getIncidentById, params.id, incidents]);
+  const incidentFromStore = useMemo(() => getIncidentById(params.id), [getIncidentById, params.id]);
 
   const [incident, setIncident] = useState<Incident | null>(incidentFromStore ?? null);
   const [status, setStatus] = useState<IncidentStatus>('pending');
@@ -49,10 +50,42 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
   }, [incidentFromStore]);
 
   useEffect(() => {
-    if (!incidentFromStore && !isLoading && incidents.length > 0) {
-      setError('Nie znaleziono zgłoszenia.');
+    if (incidentFromStore || isLoading) {
+      return;
     }
-  }, [incidentFromStore, isLoading, incidents.length]);
+
+    let isCancelled = false;
+
+    const fetchIncident = async () => {
+      try {
+        const remote = await incidentService.getById(params.id);
+        if (isCancelled) {
+          return;
+        }
+
+        if (remote) {
+          setIncident(remote);
+          setStatus(remote.status);
+          setAssignedTo(remote.assignedTo ?? '');
+          setNotes(remote.notes ?? '');
+          setError(null);
+          return;
+        }
+
+        setError('Nie znaleziono zgłoszenia.');
+      } catch {
+        if (!isCancelled) {
+          setError('Nie udało się pobrać zgłoszenia.');
+        }
+      }
+    };
+
+    void fetchIncident();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [incidentFromStore, isLoading, params.id]);
 
   const breadcrumbItems = useMemo(() => {
     if (incident) {

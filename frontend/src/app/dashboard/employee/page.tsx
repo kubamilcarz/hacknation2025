@@ -10,6 +10,10 @@ import type {
 } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
+import {
+  incidentService,
+  type IncidentListOptions,
+} from '@/lib/services/incidentService';
 import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import Footer from '@/components/Footer';
@@ -77,7 +81,16 @@ export default function EmployeeDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const { incidents, isLoading } = useIncidents();
+  const incidentsContext = useIncidents();
+  const {
+    incidents,
+    isLoading,
+    totalPages: totalPagesFromService,
+    page: currentServicePage,
+    pageSize: currentPageSize,
+    loadIncidents,
+  } = incidentsContext;
+  const totalCount = incidentsContext.totalCount;
   const statusParam = searchParams.get('status');
   const initialFilterStatus: IncidentStatus | 'all' = isIncidentStatusValue(statusParam) ? statusParam : 'all';
   const initialSearchTerm = searchParams.get('search') ?? '';
@@ -365,76 +378,7 @@ export default function EmployeeDashboard() {
     return computeDefaultSortConfig();
   });
 
-  const filteredIncidents = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    const matchesStatus = (incident: Incident) =>
-      filterStatus === 'all' ? true : incident.status === filterStatus;
-
-    const matchesSearch = (incident: Incident) => {
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      const haystack = [
-        incident.title,
-        incident.reporterName,
-        incident.reporterEmail,
-        incident.caseNumber,
-      ];
-
-      return haystack.some((value) => value.toLowerCase().includes(normalizedSearch));
-    };
-
-    const filtered = incidents.filter((incident) => matchesStatus(incident) && matchesSearch(incident));
-
-    if (!sortConfig) {
-      return filtered;
-    }
-
-    const activeColumn = columns.find((column) => column.id === sortConfig.columnId && column.sortable);
-    if (!activeColumn) {
-      return filtered;
-    }
-
-    const accessor: NonNullable<ColumnDefinition['sortAccessor']> =
-      activeColumn.sortAccessor ?? ((incident) => {
-        const value = incident[activeColumn.id as keyof Incident];
-        return value instanceof Date ? value.getTime() : (value as string | number | undefined) ?? '';
-      });
-
-    const directionFactor = sortConfig.direction === 'asc' ? 1 : -1;
-
-    return [...filtered].sort((first, second) => {
-      const firstValue = accessor(first);
-      const secondValue = accessor(second);
-
-      if (firstValue == null && secondValue == null) {
-        return 0;
-      }
-
-      if (firstValue == null) {
-        return -directionFactor;
-      }
-
-      if (secondValue == null) {
-        return directionFactor;
-      }
-
-      if (typeof firstValue === 'number' && typeof secondValue === 'number') {
-        return (firstValue - secondValue) * directionFactor;
-      }
-
-      const firstComparable = firstValue instanceof Date ? firstValue.getTime() : firstValue;
-      const secondComparable = secondValue instanceof Date ? secondValue.getTime() : secondValue;
-
-      if (typeof firstComparable === 'number' && typeof secondComparable === 'number') {
-        return (firstComparable - secondComparable) * directionFactor;
-      }
-
-      return firstComparable.toString().localeCompare(secondComparable.toString(), 'pl') * directionFactor;
-    });
-  }, [columns, filterStatus, incidents, searchTerm, sortConfig]);
+  const currentQueryOptionsRef = useRef<IncidentListOptions>({ page: 1, pageSize: PAGE_SIZE });
 
   const searchParamsString = searchParams.toString();
   const commitQueryParams = useCallback(
@@ -471,25 +415,75 @@ export default function EmployeeDashboard() {
     [pathname, router, searchParamsString]
   );
 
-  const totalItems = filteredIncidents.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const rawPageParam = searchParams.get('page');
   const parsedPageParam = rawPageParam ? Number.parseInt(rawPageParam, 10) : NaN;
   const requestedPage = Number.isNaN(parsedPageParam) ? 1 : parsedPageParam;
   const normalizedRequestedPage = requestedPage < 1 ? 1 : requestedPage;
-  const currentPage = Math.min(totalPages, normalizedRequestedPage);
-  const firstItemIndex = (currentPage - 1) * PAGE_SIZE;
-  const paginatedIncidents = useMemo(
-    () => filteredIncidents.slice(firstItemIndex, firstItemIndex + PAGE_SIZE),
-    [filteredIncidents, firstItemIndex]
-  );
-  const hasResults = totalItems > 0;
+  const totalPages = Math.max(1, totalPagesFromService);
+  const currentPage = Math.min(Math.max(1, currentServicePage), totalPages);
+  const firstItemIndex = (currentPage - 1) * currentPageSize;
+  const hasResults = totalCount > 0;
   const displayRangeStart = hasResults ? firstItemIndex + 1 : 0;
-  const displayRangeEnd = hasResults ? Math.min(totalItems, firstItemIndex + PAGE_SIZE) : 0;
+  const displayRangeEnd = hasResults
+    ? Math.min(totalCount, firstItemIndex + incidents.length)
+    : 0;
 
   const showLoadingState = isLoading;
-  const showEmptyState = !isLoading && totalItems === 0;
+  const showEmptyState = !isLoading && totalCount === 0;
   const isFallbackState = showLoadingState || showEmptyState;
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParamsString);
+    const rawSearchParam = params.get('search');
+    const normalizedSearch = rawSearchParam?.trim() ?? '';
+    const searchOption = normalizedSearch.length > 0 ? normalizedSearch : null;
+
+    const statusParam = params.get('status');
+    if (statusParam && statusParam !== 'all' && !isIncidentStatusValue(statusParam)) {
+      return;
+    }
+    const resolvedStatus: IncidentStatus | 'all' =
+      statusParam && isIncidentStatusValue(statusParam) ? statusParam : 'all';
+
+    const sortParam = params.get('sort');
+    const directionParam = params.get('direction');
+    const defaultSort = computeDefaultSortConfig();
+    const columnForSort = sortParam
+      ? columns.find((entry) => entry.id === sortParam && entry.sortable)
+      : defaultSort
+        ? columns.find((entry) => entry.id === defaultSort.columnId && entry.sortable)
+        : null;
+
+    if (sortParam && !columnForSort) {
+      return;
+    }
+
+    const resolvedSort = (columnForSort?.id ?? defaultSort?.columnId ?? 'createdAt') as IncidentListOptions['sort'];
+    const resolvedDirection: 'asc' | 'desc' = columnForSort
+      ? (isSortDirectionValue(directionParam)
+        ? directionParam
+        : columnForSort.defaultSortDirection ?? 'asc')
+      : defaultSort?.direction ?? 'desc';
+
+    const nextOptions: IncidentListOptions = {
+      page: normalizedRequestedPage,
+      pageSize: currentPageSize,
+      search: searchOption,
+      status: resolvedStatus,
+      sort: resolvedSort,
+      direction: resolvedDirection,
+    };
+
+    currentQueryOptionsRef.current = nextOptions;
+    void loadIncidents(nextOptions);
+  }, [
+    columns,
+    computeDefaultSortConfig,
+    currentPageSize,
+    loadIncidents,
+    normalizedRequestedPage,
+    searchParamsString,
+  ]);
 
   const commitSearchTerm = useCallback(
     (value?: string) => {
@@ -670,8 +664,8 @@ export default function EmployeeDashboard() {
     }
   }, [columns, commitQueryParams, computeDefaultSortConfig, searchParams, sortConfig]);
 
-  const handleExportCsv = useCallback(() => {
-    if (filteredIncidents.length === 0) {
+  const handleExportCsv = useCallback(async () => {
+    if (totalCount === 0) {
       return;
     }
 
@@ -686,25 +680,45 @@ export default function EmployeeDashboard() {
       'Data',
     ];
 
-    const rows = filteredIncidents.map((incident) => [
-      incident.caseNumber,
-      incident.title,
-      incident.reporterName,
-      incident.category,
-      priorityLabels[incident.priority],
-      statusLabels[incident.status],
-      formatDate(incident.createdAt),
-    ].map(formatCsvField).join(';'));
+    const baseOptions = currentQueryOptionsRef.current;
+    const exportPageSize = Math.max(totalCount, baseOptions.pageSize ?? PAGE_SIZE);
 
-    const csvContent = [header.map(formatCsvField).join(';'), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `lista-zgloszen-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [filteredIncidents, formatDate]);
+    try {
+      const response = await incidentService.list({
+        ...baseOptions,
+        page: 1,
+        pageSize: exportPageSize,
+      });
+      const dataset = response.items;
+      if (dataset.length === 0) {
+        return;
+      }
+
+      const rows = dataset
+        .map((incident) => [
+          incident.caseNumber,
+          incident.title,
+          incident.reporterName,
+          incident.category,
+          priorityLabels[incident.priority],
+          statusLabels[incident.status],
+          formatDate(incident.createdAt),
+        ]
+          .map(formatCsvField)
+          .join(';'));
+
+      const csvContent = [header.map(formatCsvField).join(';'), ...rows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lista-zgloszen-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Nie udało się wyeksportować zgłoszeń.', error);
+    }
+  }, [formatDate, totalCount]);
 
   const handleSort = useCallback(
     (columnId: string) => {
@@ -946,11 +960,11 @@ export default function EmployeeDashboard() {
           </div>
 
           <div className="mb-4 text-sm text-muted">
-            {isLoading
-              ? 'Ładowanie danych…'
-              : totalItems === 0
-                ? 'Brak zgłoszeń spełniających kryteria wyszukiwania.'
-                : `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalItems} zgłoszeń (łącznie ${incidents.length})`}
+              {isLoading
+                ? 'Ładowanie danych…'
+                : totalCount === 0
+                  ? 'Brak zgłoszeń spełniających kryteria wyszukiwania.'
+                  : `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalCount} zgłoszeń (łącznie ${incidents.length})`}
           </div>
 
           <div className="rounded-lg border border-subtle">
@@ -1048,7 +1062,7 @@ export default function EmployeeDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-subtle bg-surface">
-                  {paginatedIncidents.map((incident) => (
+                  {incidents.map((incident) => (
                     <tr key={incident.id} className="transition hover:bg-surface-subdued">
                       {columns.map((column) => {
                         const width = isFallbackState
@@ -1109,14 +1123,14 @@ export default function EmployeeDashboard() {
               </table>
             </div>
           </div>
-          {totalItems > 0 && (
-          <Pagination
-            className="mt-6"
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
-        )}
+          {totalCount > 0 && (
+            <Pagination
+              className="mt-6"
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          )}
         </div>
         <Footer router={router} showPanelButton={false} />
       </div>
