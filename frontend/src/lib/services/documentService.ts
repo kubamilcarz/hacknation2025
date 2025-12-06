@@ -374,6 +374,8 @@ export interface DocumentListOptions {
   search?: string | null;
   sort?: DocumentListSortField | null;
   direction?: "asc" | "desc" | null;
+  helpProvided?: boolean | null;
+  machineInvolved?: boolean | null;
 }
 
 export interface DocumentListResponse {
@@ -468,11 +470,27 @@ class MockDocumentApi implements DocumentApi {
         ? "desc"
         : "asc";
 
+    const helpProvidedFilter =
+      typeof options?.helpProvided === "boolean" ? options.helpProvided : null;
+    const machineInvolvedFilter =
+      typeof options?.machineInvolved === "boolean" ? options.machineInvolved : null;
+
     const normalizedPageSize = this.normalizePositiveInteger(options?.pageSize, 10);
     const normalizedPage = this.normalizePositiveInteger(options?.page, 1);
     const searchTerm = options?.search?.trim().toLowerCase() ?? "";
 
     const filtered = this.documents.filter((document) => {
+      if (helpProvidedFilter !== null && document.czy_udzielona_pomoc !== helpProvidedFilter) {
+        return false;
+      }
+
+      if (
+        machineInvolvedFilter !== null &&
+        document.czy_wypadek_podczas_uzywania_maszyny !== machineInvolvedFilter
+      ) {
+        return false;
+      }
+
       if (!searchTerm) {
         return true;
       }
