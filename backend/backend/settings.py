@@ -96,6 +96,5 @@ REST_FRAMEWORK = {
     ],
 }
 
-
 # CORS settings: allow all origins per request
 CORS_ALLOW_ALL_ORIGINS = True
