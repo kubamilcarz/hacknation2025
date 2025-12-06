@@ -571,7 +571,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
 
     setDownloadState(format);
     try {
-      downloadDocumentSummary(preparedDocument, format);
+      await downloadDocumentSummary(preparedDocument, format);
     } catch (error) {
       console.error(error);
       setSubmitError('Nie udało się pobrać pliku. Spróbuj ponownie.');
