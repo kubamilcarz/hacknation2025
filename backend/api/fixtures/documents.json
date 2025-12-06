@@ -1,5 +1,5 @@
 {
-  "action": "create",
+  "action": "generate-pdf",
 
   "pesel": "90010112345",
   "nr_dowodu": "ABC123456",

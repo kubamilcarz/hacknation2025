@@ -1,13 +1,13 @@
 from pathlib import Path
 import json
 
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from api.serializers import DocumentSerializer
-from tools.pdf_mapper import map_pdf_fields_to_document_data
+from tools.pdf_mapper import map_pdf_fields_to_document_data, map_document_to_pdf_fields
 from tools.pdf_reader import PDFReader
 from tools.pdf_writer import PDFWriter
 
@@ -42,13 +42,12 @@ def documents_view(request):
             )
 
         document = serializer.save()
-        return Response(data=DocumentSerializer(document).data)
+        return JsonResponse(DocumentSerializer(document).data, safe=False)
 
     if action == "generate-pdf":
         template_path = Path("tools/ewyp.pdf")
         writer = PDFWriter()
 
-        request_data = request.POST or request.GET
         serializer = DocumentSerializer(data=request_data)
         if not serializer.is_valid():
             return HttpResponse(
@@ -56,7 +55,7 @@ def documents_view(request):
             )
 
         document = serializer.save()
-        pdf_io = writer.fill_template(template_path, document)
+        pdf_io = writer.fill_template(template_path, map_document_to_pdf_fields(document))
 
         response = HttpResponse(pdf_io.getvalue(), content_type="application/pdf")
         response["Content-Disposition"] = "attachment; filename=filled.pdf"
@@ -86,4 +85,4 @@ def read_document_from_pdf_view(request):
     reader = PDFReader()
     document = map_pdf_fields_to_document_data(reader.read_input_fields(pdf))
     serializer = DocumentSerializer(document)
-    return Response(serializer.data)
+    return JsonResponse(serializer.data, safe=False)
