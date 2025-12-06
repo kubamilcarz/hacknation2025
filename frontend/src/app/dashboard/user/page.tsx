@@ -43,9 +43,9 @@ function UserDashboardContent() {
             ]}
           />
           <div>
-            <h1 className="text-3xl font-semibold text-primary">Zgłoś zdarzenie</h1>
+            <h1 className="text-3xl font-semibold text-primary">Zgłoś zdarzenie w swojej działalności</h1>
             <p className="mt-2 max-w-3xl text-sm text-muted">
-              Wypełnij kolejne kroki, aby przekazać nam komplet informacji o wypadku. Na każdym etapie podpowiemy, jakie dane są potrzebne.
+              Kreator prowadzi osoby współpracujące B2B i prowadzące jednoosobową działalność przez kolejne kroki zgłoszenia. Na każdym etapie podpowiadamy, co warto dopisać, a jeśli czegoś brakuje, możesz wrócić do pola później.
             </p>
           </div>
         </div>

@@ -19,16 +19,16 @@ export function ReviewStepSection() {
   return (
     <IncidentWizardSection
       title="Podsumowanie"
-      description="Przejrzyj wszystkie dane przed wysłaniem."
+      description="Sprawdź, czy wszystko wygląda dobrze. W razie potrzeby zawsze możesz wrócić do wcześniejszych kroków."
     >
       {hasSubmittedSuccessfully ? (
         <div className="space-y-4">
           <IncidentAiSuggestion title="Zgłoszenie wysłane">
-            Zgłoszenie nr <strong>{submittedDocumentId ?? 'w przygotowaniu'}</strong> zostało wysłane. Skontaktujemy się, gdy tylko rozpoczniemy weryfikację.
+            Zgłoszenie nr <strong>{submittedDocumentId ?? 'w przygotowaniu'}</strong> zostało wysłane. Skontaktujemy się, gdy tylko rozpoczniemy weryfikację. Jeśli zauważysz potrzebę korekty, przygotuj notatkę i poinformuj nas w odpowiedzi na wiadomość.
           </IncidentAiSuggestion>
           <div className="rounded-xl border border-dashed border-subtle bg-surface p-4">
             <p className="text-sm text-muted">
-              Zapisz potwierdzenie w preferowanym formacie. Dokument możesz później przekazać pracodawcy lub zespołowi BHP.
+              Zapisz potwierdzenie w preferowanym formacie. Przyda się jako kompletna dokumentacja sprawy oraz podczas kontaktu z urzędami, lekarzem prowadzącym lub partnerami biznesowymi.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <button
@@ -54,7 +54,7 @@ export function ReviewStepSection() {
         </div>
       ) : (
         <IncidentAiSuggestion>
-          Sprawdź prezentowane dane. Jeśli wszystko się zgadza, wyślij zgłoszenie.
+          Przejrzyj dane i upewnij się, że opisujesz zdarzenie tak, jak chcesz. Każdy krok możesz jeszcze skorygować, ale jeśli chcesz wysłać zgłoszenie już teraz, śmiało.
         </IncidentAiSuggestion>
       )}
       {submitError && (

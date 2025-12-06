@@ -7,8 +7,8 @@ export function IdentityStepSection() {
 
   return (
     <IncidentWizardSection
-      title="Tożsamość osoby poszkodowanej"
-      description="Wpisz dane osoby poszkodowanej."
+      title="Twoje podstawowe dane"
+      description="Dodaj informacje o sobie. Jeśli czegoś teraz nie masz, możesz wrócić do pola później."
     >
       <IncidentTextField
         label="PESEL"
@@ -17,7 +17,7 @@ export function IdentityStepSection() {
         maxLength={11}
         onChange={handleInputChange('pesel')}
         error={validationErrors.pesel}
-        hint="Wpisz 11 cyfr bez spacji."
+        hint="Wpisz 11 cyfr bez spacji. Gdy nie masz numeru pod ręką, zostaw pole i uzupełnij później."
       />
       <IncidentTextField
         label="Numer dokumentu tożsamości"
@@ -25,7 +25,7 @@ export function IdentityStepSection() {
         value={incidentDraft.nr_dowodu ?? ''}
         onChange={handleInputChange('nr_dowodu')}
         error={validationErrors.nr_dowodu}
-        hint="Przepisz numer, np. ABC123456."
+        hint="Przepisz numer, np. ABC123456. W razie braku dokumentu wpiszesz go przy kolejnej wizycie."
       />
       <IncidentTextField
         label="Imię"
@@ -47,7 +47,7 @@ export function IdentityStepSection() {
         value={incidentDraft.numer_telefonu ?? ''}
         optional
         onChange={handleInputChange('numer_telefonu')}
-        hint="Ułatwia szybki kontakt."
+        hint="Ułatwi szybki kontakt, ale nie jest obowiązkowy."
       />
     </IncidentWizardSection>
   );

@@ -18,7 +18,7 @@ export function WitnessesStepSection() {
   return (
     <IncidentWizardSection
       title="Świadkowie"
-      description="Dodaj osoby, które mogą potwierdzić zdarzenie."
+      description="Dodaj osoby, które mogą potwierdzić zdarzenie. Jeśli nikogo nie było na miejscu, po prostu przejdź dalej."
       actions={
         <button
           type="button"
@@ -31,8 +31,8 @@ export function WitnessesStepSection() {
     >
       {witnesses.length === 0 && (
         <div className="md:col-span-2">
-          <IncidentAiSuggestion title="Brak świadków?" variant="warning">
-            Jeśli nikt nie widział wypadku, zaznacz to później w formularzu. To standardowa informacja.
+          <IncidentAiSuggestion title="Brak świadków?">
+            Jeśli nikt nie widział zdarzenia, pozostaw listę pustą i przejdź dalej – zgłoszenie nadal będzie kompletne.
           </IncidentAiSuggestion>
         </div>
       )}

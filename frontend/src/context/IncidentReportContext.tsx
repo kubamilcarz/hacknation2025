@@ -16,29 +16,29 @@ import type { CreateDocumentInput } from '@/lib/services/documentService';
 const STEPS: IncidentWizardStep[] = [
   {
     id: 'identity',
-    title: 'Dane poszkodowanego',
-    description: 'Podaj podstawowe dane osoby poszkodowanej.',
+    title: 'Twoje dane',
+    description: 'Uzupełnij podstawowe informacje o sobie. W razie czego zawsze możesz do nich wrócić.',
   },
   {
     id: 'residence',
     title: 'Adres zamieszkania',
-    description: 'Uzupełnij adres do korespondencji.',
+    description: 'Podaj adres, pod który możemy kierować korespondencję.',
   },
   {
     id: 'accident',
     title: 'Opis zdarzenia',
-    description: 'Napisz kiedy i gdzie doszło do wypadku.',
+    description: 'Opisz własnymi słowami, kiedy i gdzie doszło do zdarzenia.',
   },
   {
     id: 'witnesses',
     title: 'Świadkowie',
-    description: 'Dodaj osoby, które widziały zdarzenie.',
+    description: 'Dodaj osoby, które mogą potwierdzić zdarzenie (jeśli takie są).',
     isOptional: true,
   },
   {
     id: 'review',
     title: 'Podsumowanie',
-    description: 'Sprawdź dane przed wysłaniem.',
+    description: 'Rzuć okiem na całość przed wysłaniem.',
   },
 ];
 
@@ -53,7 +53,7 @@ const STEP_FIELDS_BY_STEP: Record<IncidentWizardStep['id'], IncidentFieldKey[]> 
   review: [],
 };
 
-const REQUIRED_FIELD_MESSAGE = 'To pole jest wymagane.';
+const REQUIRED_FIELD_MESSAGE = 'Dodaj tę informację, abyśmy mogli przygotować kompletne zgłoszenie.';
 
 const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | null> = {
   pesel: (value) => {
@@ -62,7 +62,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (!/^\d{11}$/.test(normalized)) {
-      return 'Numer PESEL musi składać się z 11 cyfr.';
+      return 'PESEL powinien zawierać 11 cyfr – sprawdź, czy żadna się nie zgubiła.';
     }
     return null;
   },
@@ -72,7 +72,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (!/^[A-Z]{3}\d{6}$/.test(normalized)) {
-      return 'Wpisz numer dokumentu w formacie ABC123456.';
+      return 'Podaj numer dokumentu w formacie ABC123456 (trzy litery i sześć cyfr).';
     }
     return null;
   },
@@ -82,10 +82,10 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (normalized.length < 2) {
-      return 'Imię musi mieć co najmniej 2 znaki.';
+      return 'Wpisz pełne imię (minimum 2 znaki).';
     }
     if (/\d/.test(normalized)) {
-      return 'Imię nie powinno zawierać cyfr.';
+      return 'W imieniu nie używamy cyfr.';
     }
     return null;
   },
@@ -95,10 +95,10 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (normalized.length < 2) {
-      return 'Nazwisko musi mieć co najmniej 2 znaki.';
+      return 'Wpisz pełne nazwisko (minimum 2 znaki).';
     }
     if (/\d/.test(normalized)) {
-      return 'Nazwisko nie powinno zawierać cyfr.';
+      return 'W nazwisku nie używamy cyfr.';
     }
     return null;
   },
@@ -109,7 +109,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
     }
     const digitsOnly = normalized.replace(/\D/g, '');
     if (digitsOnly.length < 9 || digitsOnly.length > 15) {
-      return 'Numer telefonu powinien mieć od 9 do 15 cyfr.';
+      return 'Numer telefonu powinien mieć od 9 do 15 cyfr – wpisz go tak, jak najłatwiej się z Tobą skontaktować.';
     }
     return null;
   },
@@ -119,7 +119,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return null;
     }
     if (normalized.length < 3) {
-      return 'Ulica musi mieć co najmniej 3 znaki.';
+      return 'Nazwa ulicy powinna mieć co najmniej 3 znaki.';
     }
     return null;
   },
@@ -129,7 +129,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (normalized.length < 20) {
-      return 'Dodaj więcej szczegółów (min. 20 znaków).';
+      return 'Opisz zdarzenie w kilku zdaniach (minimum 20 znaków).';
     }
     return null;
   },

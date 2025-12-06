@@ -7,8 +7,8 @@ export function ResidenceStepSection() {
 
   return (
     <IncidentWizardSection
-      title="Adres zamieszkania"
-      description="Podaj aktualny adres poszkodowanego. Jeśli mieszkasz za granicą, wpisz ostatni adres w Polsce."
+      title="Adres korespondencyjny"
+      description="Podaj adres, pod który możemy wysłać korespondencję. Jeśli mieszkasz za granicą, zostaw ostatni adres w Polsce."
     >
       <IncidentTextField
         label="Ulica"
@@ -16,7 +16,7 @@ export function ResidenceStepSection() {
         value={incidentDraft.ulica ?? ''}
         onChange={handleInputChange('ulica')}
         optional
-        hint="Jeśli adres nie ma numeru, pozostaw pole puste."
+        hint="Jeśli na adresie brakuje numeru — nic się nie dzieje, zostaw pole puste."
       />
     </IncidentWizardSection>
   );
