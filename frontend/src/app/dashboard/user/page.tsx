@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { IncidentWizardLayout } from '@/components/user/IncidentWizardLayout';
@@ -12,7 +12,7 @@ import { AccidentStepSection } from '@/components/user/dashboard/AccidentStepSec
 import { WitnessesStepSection } from '@/components/user/dashboard/WitnessesStepSection';
 import { ResidenceStepSection } from '@/components/user/dashboard/ResidenceStepSection';
 import { ReviewStepSection } from '@/components/user/dashboard/ReviewStepSection';
-import { UserDashboardAside } from '@/components/user/dashboard/UserDashboardAside';
+import Footer from "@/components/Footer";
 import {
   WITNESS_EDITABLE_FIELDS,
   WITNESS_FIELD_VALIDATORS,
@@ -168,7 +168,7 @@ const createInitialIncidentDraft = (): CreateDocumentInput => ({
 });
 
 export default function UserDashboard() {
-  const { createDocument } = useDocuments();
+  const { createDocument, downloadDocumentFile } = useDocuments();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [furthestStepIndex, setFurthestStepIndex] = useState(0);
 
@@ -179,6 +179,7 @@ export default function UserDashboard() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
+  const [downloadState, setDownloadState] = useState<'idle' | 'docx' | 'pdf'>('idle');
 
   const currentStep = useMemo(() => steps[currentStepIndex] ?? steps[0], [currentStepIndex]);
 
@@ -425,6 +426,7 @@ export default function UserDashboard() {
 
     setSubmitState('submitting');
     setSubmitError(null);
+    setDownloadState('idle');
     setSubmittedDocumentId(null);
 
     try {
@@ -457,6 +459,23 @@ export default function UserDashboard() {
       setSubmitError('Nie udało się wysłać zgłoszenia. Spróbuj ponownie.');
     }
   };
+
+  const handleDownload = useCallback(async (format: 'docx' | 'pdf') => {
+    if (submittedDocumentId == null) {
+      setSubmitError('Brakuje numeru zgłoszenia. Wyślij dokument ponownie.');
+      return;
+    }
+
+    setDownloadState(format);
+    try {
+      await downloadDocumentFile(submittedDocumentId, format);
+    } catch (error) {
+      console.error(error);
+      setSubmitError('Nie udało się pobrać pliku. Spróbuj ponownie.');
+    } finally {
+      setDownloadState('idle');
+    }
+  }, [downloadDocumentFile, submittedDocumentId]);
 
   const handleNext = () => {
     if (isLastStep) {
@@ -525,7 +544,6 @@ export default function UserDashboard() {
           stepCount={steps.length}
           title={currentStep.title}
           description={currentStep.description}
-          rightColumn={<UserDashboardAside />}
         >
           <div className="space-y-10">
             {currentStep.id === 'identity' && (
@@ -565,6 +583,10 @@ export default function UserDashboard() {
                 hasSubmittedSuccessfully={hasSubmittedSuccessfully}
                 submitError={submitError}
                 submittedDocumentId={submittedDocumentId}
+                onDownload={handleDownload}
+                isDownloadingDocx={downloadState === 'docx'}
+                isDownloadingPdf={downloadState === 'pdf'}
+                canDownload={submittedDocumentId != null}
               />
             )}
           </div>
@@ -582,6 +604,7 @@ export default function UserDashboard() {
               : 'Dalej'}
           />
         </IncidentWizardLayout>
+        <Footer />
       </div>
     </div>
   );

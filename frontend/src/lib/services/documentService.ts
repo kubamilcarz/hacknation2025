@@ -390,6 +390,7 @@ export interface DocumentService {
   list(options?: DocumentListOptions): Promise<DocumentListResponse>;
   getById(id: number): Promise<Document | null>;
   create(payload: CreateDocumentInput): Promise<Document>;
+  downloadAttachment(id: number, format: "docx" | "pdf"): Promise<void>;
   setExportFormat(format: DocumentExportFormat): void;
 }
 
@@ -397,6 +398,7 @@ interface DocumentApi {
   list(options?: DocumentListOptions): Promise<DocumentListResponseDto>;
   getById(id: number): Promise<DocumentDetailDto | null>;
   create(payload: CreateDocumentDto): Promise<DocumentDetailDto>;
+  downloadAttachment(id: number, format: "docx" | "pdf"): Promise<void>;
   setExportFormat(format: DocumentExportFormat): void;
 }
 
@@ -427,6 +429,10 @@ class DefaultDocumentService implements DocumentService {
     const dtoPayload = mapPartialDocumentToCreateDto(payload);
     const createdDto = await this.api.create(dtoPayload);
     return mapDocumentDetailDtoToDocument(createdDto);
+  }
+
+  async downloadAttachment(id: number, format: "docx" | "pdf") {
+    await this.api.downloadAttachment(id, format);
   }
 }
 
@@ -561,6 +567,24 @@ class MockDocumentApi implements DocumentApi {
     const storedDocument = this.cloneDto(newDocument);
     this.documents = [storedDocument, ...this.documents];
     return this.cloneDto(storedDocument);
+  }
+
+  async downloadAttachment(id: number, format: "docx" | "pdf"): Promise<void> {
+    await delay();
+    const found = this.documents.find((document) => document.id === id);
+    if (!found) {
+      throw new Error("Nie znaleziono zgłoszenia do pobrania.");
+    }
+
+    const domainDocument = mapDocumentDetailDtoToDocument(found);
+    if (format === "pdf") {
+      const pdfBlob = createDocumentSummaryPdf(domainDocument);
+      downloadBlobWithName(pdfBlob, `zgloszenie-${id}.pdf`);
+      return;
+    }
+
+    const docxBlob = createDocumentSummaryDocx(domainDocument);
+    downloadBlobWithName(docxBlob, `zgloszenie-${id}.docx`);
   }
 
   private handleExport(format: DocumentExportFormat, documents: DocumentDetailDto[]) {
@@ -718,6 +742,152 @@ function downloadPdf(items: Document[]) {
 
     doc.save(`${EXPORT_FILE_PREFIX}-${new Date().toISOString().slice(0, 10)}.pdf`);
   })();
+}
+
+function createDocumentSummaryPdf(document: Document) {
+  const headers = ["Pole", "Wartość"];
+  const rows = buildDocumentSummaryRows(document);
+  return createTablePdfBlob(headers, rows, { columnLengthHints: [18, 42], maxLinesPerCell: 6 });
+}
+
+function createDocumentSummaryDocx(document: Document) {
+  const rows = buildDocumentSummaryRows(document);
+  const issuedAt = new Date().toLocaleString("pl-PL", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+
+  const sections = rows
+    .map(([label, value]) => `<p><strong>${escapeHtmlBasic(label)}:</strong> ${escapeHtmlPreservingBreaks(value)}</p>`)
+    .join("\n");
+
+  const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8" /><title>Zawiadomienie o wypadku</title><style>body{font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#1c2333;}h1{font-size:20px;margin-bottom:16px;}p{margin:8px 0;}strong{color:#103d7a;}</style></head><body><h1>Zawiadomienie o wypadku</h1><p>Wygenerowano: ${escapeHtmlBasic(issuedAt)}</p>${sections}</body></html>`;
+
+  return new Blob([html], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document;charset=utf-8",
+  });
+}
+
+function buildDocumentSummaryRows(document: Document): string[][] {
+  const rows: Array<[string, string]> = [
+    ["Numer zgłoszenia", formatSummaryValue(document.id != null ? document.id.toString() : null)],
+    ["Imię i nazwisko", formatSummaryValue(`${document.imie ?? ""} ${document.nazwisko ?? ""}`)],
+    ["PESEL", formatSummaryValue(document.pesel)],
+    ["Numer dokumentu tożsamości", formatSummaryValue(document.nr_dowodu)],
+    ["Adres zamieszkania", formatSummaryValue(formatSummaryAddress(document))],
+    ["Telefon kontaktowy", formatSummaryValue(document.numer_telefonu)],
+    [
+      "Data i godzina wypadku",
+      formatSummaryValue(formatSummaryDateTime(document.data_wypadku, document.godzina_wypadku)),
+    ],
+    ["Miejsce wypadku", formatSummaryValue(document.miejsce_wypadku)],
+    ["Czy udzielono pierwszej pomocy", formatSummaryBoolean(document.czy_udzielona_pomoc)],
+    ["Opis okoliczności", formatSummaryValue(document.szczegoly_okolicznosci)],
+    ["Maszyny i urządzenia", formatSummaryValue(document.opis_maszyn)],
+    ["Świadkowie", formatWitnessList(document)],
+  ];
+
+  return rows.map(([label, value]) => [label, value]);
+}
+
+function formatSummaryValue(value: string | number | null | undefined) {
+  const normalized = normalizeSummaryValue(value);
+  return normalized.length > 0 ? normalized : "Brak danych";
+}
+
+function normalizeSummaryValue(value: string | number | null | undefined) {
+  if (value == null) {
+    return "";
+  }
+
+  const asString = typeof value === "number" ? value.toString() : value;
+  return asString.trim();
+}
+
+function formatSummaryDateTime(date: string | null | undefined, time: string | null | undefined) {
+  const normalizedDate = normalizeSummaryValue(date);
+  const normalizedTime = normalizeSummaryValue(time ? time.slice(0, 5) : time);
+  return [normalizedDate, normalizedTime].filter(Boolean).join(" ");
+}
+
+function formatSummaryAddress(document: Document) {
+  const street = normalizeSummaryValue(document.ulica);
+  const house = normalizeSummaryValue(document.nr_domu);
+  const flat = normalizeSummaryValue(document.nr_lokalu);
+  const postal = normalizeSummaryValue(document.kod_pocztowy);
+  const city = normalizeSummaryValue(document.miejscowosc);
+  const country = normalizeSummaryValue(document.nazwa_panstwa);
+
+  const parts: string[] = [];
+  const streetLine: string[] = [];
+
+  if (street) {
+    streetLine.push(street);
+  }
+
+  if (house || flat) {
+    const numberParts = [house, flat].filter(Boolean);
+    if (numberParts.length > 0) {
+      streetLine.push(numberParts.join("/"));
+    }
+  }
+
+  if (streetLine.length > 0) {
+    parts.push(streetLine.join(" "));
+  }
+
+  const locality: string[] = [];
+  if (postal && city) {
+    locality.push(`${postal} ${city}`);
+  } else {
+    if (postal) {
+      locality.push(postal);
+    }
+    if (city) {
+      locality.push(city);
+    }
+  }
+
+  if (locality.length > 0) {
+    parts.push(locality.join(" "));
+  }
+
+  if (country) {
+    parts.push(country);
+  }
+
+  return parts.join(", ");
+}
+
+function formatSummaryBoolean(value: boolean | null | undefined) {
+  if (value === true) {
+    return "Tak";
+  }
+  if (value === false) {
+    return "Nie";
+  }
+  return "Brak danych";
+}
+
+function formatWitnessList(document: Document) {
+  const names = (document.witnesses ?? [])
+    .map((witness) => normalizeSummaryValue(`${witness.imie ?? ""} ${witness.nazwisko ?? ""}`))
+    .filter((name) => name.length > 0);
+
+  return names.length > 0 ? names.join(", ") : "Brak świadków";
+}
+
+function escapeHtmlBasic(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeHtmlPreservingBreaks(value: string) {
+  return escapeHtmlBasic(value).replace(/\r\n|\r|\n/g, "<br />");
 }
 
 function formatPdfIncidentDate(document: Document) {
@@ -1221,6 +1391,22 @@ function downloadBlob(blob: Blob, extension: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${EXPORT_FILE_PREFIX}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+  anchor.style.display = "none";
+  document.body?.appendChild(anchor);
+  anchor.click();
+  anchor.parentNode?.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function downloadBlobWithName(blob: Blob, fileName: string) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
   anchor.style.display = "none";
   document.body?.appendChild(anchor);
   anchor.click();
