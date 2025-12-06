@@ -76,6 +76,7 @@ const HIGH_CONTRAST_OVERRIDES: Record<ThemeVariant, Partial<ThemeTokens>> = {
     "--color-background": "#ffffff",
     "--color-surface": "#ffffff",
     "--color-surface-subdued": "#fafafa",
+    "--color-surface-elevated": "#ffffff",
     "--color-divider": "rgba(15, 23, 42, 0.7)",
     "--color-border": "rgba(15, 23, 42, 0.9)",
     "--color-border-strong": "rgba(15, 23, 42, 1)",
@@ -86,15 +87,20 @@ const HIGH_CONTRAST_OVERRIDES: Record<ThemeVariant, Partial<ThemeTokens>> = {
     "--color-accent-strong": "#1e40af",
     "--color-accent-soft": "rgba(29, 78, 216, 0.18)",
     "--color-accent-text": "#eef2ff",
-    "--color-focus-ring": "rgba(15, 23, 42, 0.8)",
+    "--color-focus-ring": "rgba(15, 23, 42, 0.85)",
+    "--color-toolbar-background": "rgba(255, 255, 255, 0.96)",
+    "--color-toolbar-border": "rgba(15, 23, 42, 0.75)",
+    "--color-toolbar-foreground": "#0f172a",
+    "--color-toolbar-muted": "#1f2937",
     "--shadow-card": "0 0 0 3px rgba(15, 23, 42, 0.9)",
-    "--shadow-toolbar": "0 0 0 3px rgba(15, 23, 42, 0.8)",
+    "--shadow-toolbar": "0 0 0 3px rgba(15, 23, 42, 0.85)",
     "--shadow-toolbar-strong": "0 0 0 3px rgba(29, 78, 216, 0.8)",
   },
   dark: {
     "--color-background": "#000000",
     "--color-surface": "#020617",
     "--color-surface-subdued": "#0f172a",
+    "--color-surface-elevated": "#111827",
     "--color-divider": "rgba(226, 232, 240, 0.75)",
     "--color-border": "rgba(226, 232, 240, 0.85)",
     "--color-border-strong": "rgba(226, 232, 240, 1)",
@@ -106,9 +112,64 @@ const HIGH_CONTRAST_OVERRIDES: Record<ThemeVariant, Partial<ThemeTokens>> = {
     "--color-accent-soft": "rgba(14, 165, 233, 0.22)",
     "--color-accent-text": "#082f49",
     "--color-focus-ring": "rgba(226, 232, 240, 0.85)",
+    "--color-toolbar-background": "rgba(15, 23, 42, 0.92)",
+    "--color-toolbar-border": "rgba(226, 232, 240, 0.7)",
+    "--color-toolbar-foreground": "#f8fafc",
+    "--color-toolbar-muted": "#e2e8f0",
     "--shadow-card": "0 0 0 3px rgba(226, 232, 240, 0.85)",
-    "--shadow-toolbar": "0 0 0 3px rgba(226, 232, 240, 0.7)",
+    "--shadow-toolbar": "0 0 0 3px rgba(226, 232, 240, 0.75)",
     "--shadow-toolbar-strong": "0 0 0 3px rgba(56, 189, 248, 0.7)",
+  },
+};
+
+const BLACK_YELLOW_CONTRAST_OVERRIDES: Record<ThemeVariant, Partial<ThemeTokens>> = {
+  light: {
+    "--color-background": "#000000",
+    "--color-surface": "#000000",
+    "--color-surface-subdued": "#111111",
+    "--color-surface-elevated": "#111111",
+    "--color-divider": "rgba(255, 232, 0, 0.9)",
+    "--color-border": "rgba(255, 232, 0, 0.95)",
+    "--color-border-strong": "#ffe800",
+    "--color-text-primary": "#ffe800",
+    "--color-text-secondary": "#fff8b0",
+    "--color-text-muted": "#facc15",
+    "--color-accent": "#ffe800",
+    "--color-accent-strong": "#facc15",
+    "--color-accent-soft": "rgba(255, 232, 0, 0.2)",
+    "--color-accent-text": "#000000",
+    "--color-focus-ring": "rgba(255, 232, 0, 0.95)",
+    "--color-toolbar-background": "rgba(0, 0, 0, 0.94)",
+    "--color-toolbar-border": "rgba(255, 232, 0, 0.85)",
+    "--color-toolbar-foreground": "#ffe800",
+    "--color-toolbar-muted": "#facc15",
+    "--shadow-card": "0 0 0 3px rgba(255, 232, 0, 0.9)",
+    "--shadow-toolbar": "0 0 0 3px rgba(255, 232, 0, 0.85)",
+    "--shadow-toolbar-strong": "0 0 0 3px rgba(255, 232, 0, 0.95)",
+  },
+  dark: {
+    "--color-background": "#000000",
+    "--color-surface": "#000000",
+    "--color-surface-subdued": "#111111",
+    "--color-surface-elevated": "#111111",
+    "--color-divider": "rgba(255, 232, 0, 0.9)",
+    "--color-border": "rgba(255, 232, 0, 0.95)",
+    "--color-border-strong": "#ffe800",
+    "--color-text-primary": "#ffe800",
+    "--color-text-secondary": "#fff8b0",
+    "--color-text-muted": "#facc15",
+    "--color-accent": "#ffe800",
+    "--color-accent-strong": "#facc15",
+    "--color-accent-soft": "rgba(255, 232, 0, 0.2)",
+    "--color-accent-text": "#000000",
+    "--color-focus-ring": "rgba(255, 232, 0, 0.95)",
+    "--color-toolbar-background": "rgba(0, 0, 0, 0.94)",
+    "--color-toolbar-border": "rgba(255, 232, 0, 0.85)",
+    "--color-toolbar-foreground": "#ffe800",
+    "--color-toolbar-muted": "#facc15",
+    "--shadow-card": "0 0 0 3px rgba(255, 232, 0, 0.9)",
+    "--shadow-toolbar": "0 0 0 3px rgba(255, 232, 0, 0.85)",
+    "--shadow-toolbar-strong": "0 0 0 3px rgba(255, 232, 0, 0.95)",
   },
 };
 
@@ -173,6 +234,10 @@ function applyContrastOverrides(scheme: ThemeVariant, contrast: ContrastSetting,
 
   if (contrast === "high") {
     return mergeTokens(tokens, HIGH_CONTRAST_OVERRIDES[scheme]);
+  }
+
+  if (contrast === "blackYellow") {
+    return mergeTokens(tokens, BLACK_YELLOW_CONTRAST_OVERRIDES[scheme]);
   }
 
   return mergeTokens(tokens, LOW_CONTRAST_OVERRIDES[scheme]);

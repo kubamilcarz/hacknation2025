@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 
-export type ContrastSetting = "normal" | "high" | "low";
+export type ContrastSetting = "normal" | "high" | "low" | "blackYellow";
 export type AppearanceSetting = "auto" | "light" | "dark";
 
 export type AccessibilityState = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   type AppearanceSetting,
   type ContrastSetting,
@@ -10,15 +10,31 @@ import {
 type DropdownKey = "contrast" | "font" | "appearance";
 
 const contrastOptions: Array<{ label: string; value: ContrastSetting }> = [
-  { label: "Normal", value: "normal" },
-  { label: "High", value: "high" },
-  { label: "Low", value: "low" },
+  { label: "Standardowy", value: "normal" },
+  { label: "Wysoki kontrast", value: "high" },
+  { label: "Niski kontrast", value: "low" },
+  { label: "Czarno-żółty", value: "blackYellow" },
 ];
 
+const contrastSwatches: Record<ContrastSetting, CSSProperties> = {
+  normal: {
+    backgroundImage: "linear-gradient(90deg, #e2e8f0 0%, #cbd5f5 100%)",
+  },
+  high: {
+    backgroundImage: "linear-gradient(90deg, #ffffff 0%, #0f172a 100%)",
+  },
+  low: {
+    backgroundImage: "linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%)",
+  },
+  blackYellow: {
+    backgroundImage: "linear-gradient(90deg, #000000 0%, #ffe800 100%)",
+  },
+};
+
 const appearanceOptions: Array<{ label: string; value: AppearanceSetting }> = [
-  { label: "Auto", value: "auto" },
-  { label: "Light", value: "light" },
-  { label: "Dark", value: "dark" },
+  { label: "Automatyczny", value: "auto" },
+  { label: "Jasny", value: "light" },
+  { label: "Ciemny", value: "dark" },
 ];
 
 export default function AccessibilityToolbar() {
@@ -75,8 +91,8 @@ export default function AccessibilityToolbar() {
       role="presentation"
     >
       <ToolbarButton
-        label="Contrast"
-        ariaLabel="Toggle contrast menu"
+        label="Kontrast"
+        ariaLabel="Przełącz menu kontrastu"
         icon={
           <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -95,8 +111,8 @@ export default function AccessibilityToolbar() {
         onToggle={() => toggleMenu("contrast")}
         dropdown={
           openMenu === "contrast" && (
-            <div className={dropdownStyles} role="menu" aria-label="Contrast options">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Contrast</p>
+            <div className={dropdownStyles} role="menu" aria-label="Opcje kontrastu">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Kontrast</p>
               <div className="flex flex-col gap-1.5 text-xs">
                 {contrastOptions.map((option) => (
                   <button
@@ -104,12 +120,16 @@ export default function AccessibilityToolbar() {
                     type="button"
                     className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${contrast === option.value ? "bg-surface-subdued text-primary" : "text-secondary hover:bg-(--color-surface-subdued)"}`}
                     role="menuitemradio"
-                    aria-label={`Set contrast to ${option.label}`}
+                    aria-label={`Ustaw kontrast na ${option.label}`}
                     aria-checked={contrast === option.value}
                     onClick={() => setContrast(option.value)}
                   >
                     {option.label}
-                    <span className="h-2 w-10 rounded-full bg-linear-to-r from-gray-200 via-gray-300 to-gray-500" aria-hidden="true" />
+                    <span
+                      className="h-2 w-10 rounded-full"
+                      style={contrastSwatches[option.value]}
+                      aria-hidden="true"
+                    />
                   </button>
                 ))}
               </div>
@@ -119,41 +139,41 @@ export default function AccessibilityToolbar() {
       />
 
       <ToolbarButton
-        label="Font size"
-        ariaLabel="Toggle font size menu"
+        label="Rozmiar tekstu"
+        ariaLabel="Przełącz menu rozmiaru tekstu"
         icon={<span className="text-xs font-semibold" aria-hidden="true">Aa</span>}
         isOpen={openMenu === "font"}
         isActive={fontScale !== 0}
         onToggle={() => toggleMenu("font")}
         dropdown={
           openMenu === "font" && (
-            <div className={dropdownStyles} role="menu" aria-label="Font size controls">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Text size</p>
+            <div className={dropdownStyles} role="menu" aria-label="Sterowanie rozmiarem tekstu">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Rozmiar tekstu</p>
               <div className="flex items-center justify-between gap-2 rounded-md border border-subtle bg-surface-subdued px-2 py-1.5">
                 <button
                   type="button"
                   className="flex h-7 w-7 items-center justify-center rounded-md border border-subtle text-base font-semibold text-secondary transition hover:bg-(--color-surface-subdued) focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1"
-                  aria-label="Decrease text size"
+                  aria-label="Zmniejsz rozmiar tekstu"
                   onClick={decreaseFont}
                 >
                   -
                 </button>
                 <div className="flex flex-col items-center">
                   <span className="text-xs font-semibold text-primary">Aa</span>
-                  <span className="text-[10px] text-muted">{fontScale === 0 ? "Default" : `Level ${fontScale}`}</span>
+                  <span className="text-[10px] text-muted">{fontScale === 0 ? "Domyślny" : `Poziom ${fontScale}`}</span>
                 </div>
                 <button
                   type="button"
                   className="flex h-7 w-7 items-center justify-center rounded-md border border-subtle text-base font-semibold text-secondary transition hover:bg-(--color-surface-subdued) focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1"
-                  aria-label="Increase text size"
+                  aria-label="Zwiększ rozmiar tekstu"
                   onClick={increaseFont}
                 >
                   +
                 </button>
               </div>
               <div className="mt-2 space-y-1 text-[11px] text-muted">
-                <p>Adjust text size to improve readability.</p>
-                <p>Changes apply to interface text once enabled.</p>
+                <p>Dostosuj rozmiar tekstu, aby poprawić czytelność.</p>
+                <p>Zmiany zostaną zastosowane do tekstu interfejsu po włączeniu.</p>
               </div>
             </div>
           )
@@ -161,8 +181,8 @@ export default function AccessibilityToolbar() {
       />
 
       <ToolbarButton
-        label="Appearance"
-        ariaLabel="Toggle appearance menu"
+        label="Wygląd"
+        ariaLabel="Przełącz menu motywu"
         icon={
           <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="4" fill="currentColor" />
@@ -179,8 +199,8 @@ export default function AccessibilityToolbar() {
         onToggle={() => toggleMenu("appearance")}
         dropdown={
           openMenu === "appearance" && (
-            <div className={dropdownStyles} role="menu" aria-label="Appearance options">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Theme</p>
+            <div className={dropdownStyles} role="menu" aria-label="Opcje motywu">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Motyw</p>
               <div className="flex flex-col gap-1.5 text-xs">
                 {appearanceOptions.map((option) => (
                   <button
@@ -189,11 +209,11 @@ export default function AccessibilityToolbar() {
                     className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${appearance === option.value ? "bg-surface-subdued text-primary" : "text-secondary hover:bg-(--color-surface-subdued)"}`}
                     role="menuitemradio"
                     aria-checked={appearance === option.value}
-                    aria-label={`Set appearance to ${option.label}`}
+                    aria-label={`Ustaw motyw na ${option.label}`}
                     onClick={() => setAppearance(option.value)}
                   >
                     <span
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-subtle bg-surface"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-subtle bg-surface aspect-square"
                       aria-hidden="true"
                     >
                       {option.value === "auto" && (
@@ -229,9 +249,9 @@ export default function AccessibilityToolbar() {
                     <span className="flex flex-col text-left">
                       <span>{option.label}</span>
                       <span className="text-[11px] font-normal text-muted">
-                        {option.value === "auto" && "Match system setting"}
-                        {option.value === "light" && "Bright background"}
-                        {option.value === "dark" && "Low-light friendly"}
+                        {option.value === "auto" && "Zgodnie z ustawieniami systemu"}
+                        {option.value === "light" && "Jasne tło"}
+                        {option.value === "dark" && "Przyjazny w słabym oświetleniu"}
                       </span>
                     </span>
                   </button>
