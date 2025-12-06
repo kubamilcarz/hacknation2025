@@ -4,6 +4,7 @@ export type IncidentPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Incident {
   id: string;
+  caseNumber: string;
   title: string;
   description: string;
   category: string;

@@ -117,7 +117,7 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
             </button>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold text-primary">
-                {incident ? `Zgłoszenie #${incident.id}` : 'Zgłoszenie'}
+                {incident ? `Zgłoszenie ${incident.caseNumber}` : 'Zgłoszenie'}
               </h1>
               {incident && getStatusBadge(incident.status)}
             </div>
@@ -146,6 +146,10 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
               <section className="border-b border-subtle pb-6">
                 <h2 className="text-lg font-semibold text-primary">Informacje podstawowe</h2>
                 <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Numer sprawy</p>
+                    <p className="mt-1 text-base font-medium text-primary">{incident.caseNumber}</p>
+                  </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted">Tytuł</p>
                     <p className="mt-1 text-base font-medium text-primary">{incident.title}</p>

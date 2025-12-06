@@ -48,6 +48,7 @@ class MockIncidentService implements IncidentService {
     const now = new Date();
     const newIncident: Incident = {
       id: this.generateId(),
+      caseNumber: this.generateCaseNumber(now),
       title: payload.title,
       description: payload.description,
       category: payload.category,
@@ -84,6 +85,13 @@ class MockIncidentService implements IncidentService {
 
   private generateId() {
     return Math.random().toString(36).slice(2, 8).toUpperCase();
+  }
+
+  private generateCaseNumber(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const sequence = String(Math.floor(Math.random() * 9000) + 1000).padStart(4, '0');
+    return `${year}/${month}/${sequence}`;
   }
 }
 

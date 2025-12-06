@@ -3,6 +3,7 @@ import { Incident } from '@/types/incident';
 export const mockIncidents: Incident[] = [
   {
     id: '1',
+    caseNumber: '2025/12/0001',
     title: 'Brak wypłaty zasiłku chorobowego',
     description: 'Od trzech tygodni nie otrzymuję zasiłku chorobowego mimo złożenia wszystkich dokumentów.',
     category: 'Zasiłki',
@@ -17,6 +18,7 @@ export const mockIncidents: Incident[] = [
   },
   {
     id: '2',
+    caseNumber: '2025/11/0042',
     title: 'Problem z dostępem do konta',
     description: 'Nie mogę zalogować się do systemu PUE ZUS.',
     category: 'Techniczne',
@@ -32,6 +34,7 @@ export const mockIncidents: Incident[] = [
   },
   {
     id: '3',
+    caseNumber: '2025/12/0127',
     title: 'Nieprawidłowa wysokość emerytury',
     description: 'Otrzymuję emeryturę w nieprawidłowej wysokości. Proszę o weryfikację.',
     category: 'Emerytury',
@@ -45,6 +48,7 @@ export const mockIncidents: Incident[] = [
   },
   {
     id: '4',
+    caseNumber: '2025/11/0983',
     title: 'Brak informacji o stażu pracy',
     description: 'W systemie nie widać mojego stażu pracy z lat 1995-2000.',
     category: 'Dokumentacja',

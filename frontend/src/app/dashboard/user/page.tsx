@@ -41,7 +41,7 @@ export default function UserDashboard() {
   const [formData, setFormData] = useState<IncidentFormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const [caseId, setCaseId] = useState<string | null>(null);
+  const [caseNumber, setCaseNumber] = useState<string | null>(null);
 
   const handleChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
@@ -60,7 +60,7 @@ export default function UserDashboard() {
 
     try {
       const created = await createIncident(formData);
-      setCaseId(created.id);
+      setCaseNumber(created.caseNumber);
       setFormData(initialFormState);
     } catch (err) {
       setSubmissionError(
@@ -92,9 +92,9 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {caseId && (
+          {caseNumber && (
             <div className="mb-6 rounded-lg border border-(--color-accent-strong) bg-(--color-accent-soft) px-4 py-3 text-sm text-accent">
-              Zgłoszenie przyjęte. Tymczasowy numer sprawy: <span className="font-semibold">{caseId}</span>. Kopię wyślemy na
+              Zgłoszenie przyjęte. Tymczasowy numer sprawy: <span className="font-semibold">{caseNumber}</span>. Kopię wyślemy na
               adres e-mail po podłączeniu systemu produkcyjnego.
             </div>
           )}

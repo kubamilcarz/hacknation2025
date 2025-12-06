@@ -35,6 +35,7 @@ export default function EmployeeDashboard() {
 
       const searchable = [
         incident.id,
+        incident.caseNumber,
         incident.title,
         incident.reporterName,
         incident.reporterEmail,
@@ -137,7 +138,7 @@ export default function EmployeeDashboard() {
             <table className="w-full divide-y divide-subtle text-sm">
               <thead className="bg-surface-subdued text-xs font-medium uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left">Nr</th>
+                  <th className="px-4 py-3 text-left">Numer sprawy</th>
                   <th className="px-4 py-3 text-left">Tytuł</th>
                   <th className="px-4 py-3 text-left">Zgłaszający</th>
                   <th className="px-4 py-3 text-left">Kategoria</th>
@@ -150,7 +151,7 @@ export default function EmployeeDashboard() {
               <tbody className="divide-y divide-subtle bg-surface">
                 {filteredIncidents.map((incident) => (
                   <tr key={incident.id} className="transition hover:bg-surface-subdued">
-                    <td className="px-4 py-3 font-semibold text-secondary">#{incident.id}</td>
+                    <td className="px-4 py-3 font-semibold text-secondary">{incident.caseNumber}</td>
                     <td className="px-4 py-3 text-primary">{incident.title}</td>
                     <td className="px-4 py-3 text-secondary">{incident.reporterName}</td>
                     <td className="px-4 py-3 text-secondary">{incident.category}</td>
