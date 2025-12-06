@@ -678,22 +678,46 @@ function downloadJson(items: Document[]) {
   downloadBlob(blob, "json");
 }
 
-function downloadPdf(items: Document[]) {
-  const headers = PDF_TABLE_COLUMNS.map((column) => column.label);
-  const rows = items.map((document) => PDF_TABLE_COLUMNS.map((column) => column.accessor(document)));
+void createTablePdfBlob;
 
-  const effectiveRows =
-    rows.length > 0
-      ? rows
+function downloadPdf(items: Document[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const headers = PDF_TABLE_COLUMNS.map((column) => column.label);
+  const rows =
+    items.length > 0
+      ? items.map((document) => PDF_TABLE_COLUMNS.map((column) => column.accessor(document)))
       : [
           PDF_TABLE_COLUMNS.map((_, columnIndex) =>
             columnIndex === 0 ? "Brak dokumentów spełniających bieżące kryteria." : ""
           ),
         ];
 
-  const columnLengthHints = PDF_TABLE_COLUMNS.map((column) => column.lengthHint ?? 0);
-  const pdfBlob = createTablePdfBlob(headers, effectiveRows, { columnLengthHints, maxLinesPerCell: 3 });
-  downloadBlob(pdfBlob, "pdf");
+  void (async () => {
+    const [{ jsPDF }, autoTableModule] = await Promise.all([
+      import("jspdf"),
+      import("jspdf-autotable"),
+    ]);
+
+    const autoTable = (autoTableModule as typeof import("jspdf-autotable")).default;
+    if (!autoTable) {
+      return;
+    }
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt" });
+
+    autoTable(doc, {
+      head: [headers],
+      body: rows,
+      styles: { fontSize: 10, cellPadding: 6 },
+      headStyles: { fillColor: [16, 61, 122], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [245, 247, 252] },
+      margin: { top: 40, bottom: 30, left: 40, right: 40 },
+    });
+
+    doc.save(`${EXPORT_FILE_PREFIX}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  })();
 }
 
 function formatPdfIncidentDate(document: Document) {
