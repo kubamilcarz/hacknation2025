@@ -82,7 +82,7 @@ export default function AccessibilityToolbar({ variant = "floating", className }
 
   const containerClassName = useMemo(() => {
     const base =
-      "flex h-10 items-center divide-x divide-subtle rounded-lg border bg-toolbar text-toolbar backdrop-blur-sm transition-all duration-200";
+      "flex h-10 items-center divide-x divide-[color:color-mix(in_srgb,var(--color-toolbar-border)_52%,transparent)] rounded-lg border bg-toolbar text-toolbar backdrop-blur-sm transition-all duration-200";
     const position = variant === "inline" ? "relative z-0" : "fixed top-6 right-6 z-50";
     const highlight = contrast !== "normal" || appearance !== "auto" || fontScale !== 0;
     if (highlight) {
@@ -125,7 +125,7 @@ export default function AccessibilityToolbar({ variant = "floating", className }
                   <button
                     key={option.value}
                     type="button"
-                    className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 border border-subtle bg-surface-subdued ${contrast === option.value ? "bg-surface-subdued text-primary" : "text-secondary hover:bg-(--color-surface-subdued)"}`}
+                    className={`flex w-full items-center justify-between rounded-md border border-transparent px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${contrast === option.value ? "bg-(--color-toolbar-selection) text-primary" : "text-secondary hover:bg-(--color-toolbar-hover)"}`}
                     role="menuitemradio"
                     aria-label={`Ustaw kontrast na ${option.label}`}
                     aria-checked={contrast === option.value}
@@ -156,10 +156,10 @@ export default function AccessibilityToolbar({ variant = "floating", className }
           openMenu === "font" && (
             <div className={dropdownStyles} role="menu" aria-label="Sterowanie rozmiarem tekstu">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Rozmiar tekstu</p>
-              <div className="flex items-center justify-between gap-2 rounded-md border border-subtle bg-surface-subdued px-2 py-1.5">
+              <div className="flex items-center justify-between gap-2 rounded-md border border-subtle bg-(--color-toolbar-selection-muted) px-2 py-1.5">
                 <button
                   type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-subtle text-base font-semibold text-secondary transition hover:bg-(--color-surface-subdued) focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-subtle text-base font-semibold text-secondary transition hover:bg-(--color-toolbar-hover) focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1"
                   aria-label="Zmniejsz rozmiar tekstu"
                   onClick={decreaseFont}
                 >
@@ -171,7 +171,7 @@ export default function AccessibilityToolbar({ variant = "floating", className }
                 </div>
                 <button
                   type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-subtle text-base font-semibold text-secondary transition hover:bg-(--color-surface-subdued) focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-subtle text-base font-semibold text-secondary transition hover:bg-(--color-toolbar-hover) focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1"
                   aria-label="Zwiększ rozmiar tekstu"
                   onClick={increaseFont}
                 >
@@ -213,14 +213,14 @@ export default function AccessibilityToolbar({ variant = "floating", className }
                   <button
                     key={option.value}
                     type="button"
-                    className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${appearance === option.value ? "bg-surface-subdued text-primary" : "text-secondary hover:bg-(--color-surface-subdued)"}`}
+                    className={`flex w-full items-center gap-2 rounded-md border border-transparent px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${appearance === option.value ? "bg-(--color-toolbar-selection) text-primary" : "text-secondary hover:bg-(--color-toolbar-hover)"}`}
                     role="menuitemradio"
                     aria-checked={appearance === option.value}
                     aria-label={`Ustaw motyw na ${option.label}`}
                     onClick={() => setAppearance(option.value)}
                   >
                     <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-subtle bg-surface aspect-square"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-subtle bg-(--color-toolbar-selection-soft) aspect-square"
                       aria-hidden="true"
                     >
                       {option.value === "auto" && (
@@ -283,18 +283,29 @@ type ToolbarButtonProps = {
 };
 
 function ToolbarButton({ label, ariaLabel, icon, isOpen, isActive, onToggle, dropdown }: ToolbarButtonProps) {
+  const textClasses = isOpen || isActive ? "text-(--color-accent-strong)" : "text-toolbar-muted hover:text-foreground";
+  const overlayClasses = isOpen
+    ? "bg-(--color-toolbar-selection)"
+    : isActive
+      ? "bg-(--color-toolbar-active)"
+      : "bg-transparent group-hover:bg-(--color-toolbar-hover)";
+
   return (
     <div className="relative">
       <button
         type="button"
-        className={`flex h-10 w-12 items-center justify-center transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${isOpen ? "bg-surface-subdued" : "bg-transparent"} ${isActive ? "text-(--color-accent-strong)" : "text-toolbar-muted hover:text-foreground"}`}
+        className={`group relative flex h-10 w-12 items-center justify-center overflow-hidden rounded-md transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${textClasses}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={ariaLabel}
         onClick={onToggle}
       >
         <span className="sr-only">{label}</span>
-        {icon}
+        <span
+          className={`pointer-events-none absolute inset-px rounded-md transition ${overlayClasses}`}
+          aria-hidden="true"
+        />
+        <span className="relative z-10 flex items-center justify-center">{icon}</span>
       </button>
       {dropdown}
     </div>

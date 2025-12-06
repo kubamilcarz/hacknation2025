@@ -64,7 +64,7 @@ export default function Home() {
           </div>
         </section>
 
-        <Footer router={router} />
+        <Footer router={router} showPanelButton={true} />
       </div>
     </div>
   );

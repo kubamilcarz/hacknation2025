@@ -21,6 +21,11 @@
     --color-toolbar-border: rgba(227, 229, 232, 0.9);
     --color-toolbar-foreground: #1a1a1a;
     --color-toolbar-muted: #5e6a73;
+    --color-toolbar-hover: rgba(0, 58, 143, 0.08);
+    --color-toolbar-active: rgba(0, 58, 143, 0.12);
+    --color-toolbar-selection: rgba(0, 58, 143, 0.16);
+    --color-toolbar-selection-muted: rgba(0, 58, 143, 0.06);
+    --color-toolbar-selection-soft: rgba(255, 255, 255, 0.8);
     --color-input: #ffffff;
     --color-success: #2e7d32;
     --color-success-soft: rgba(46, 125, 50, 0.12);
