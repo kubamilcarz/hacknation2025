@@ -1,6 +1,38 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Modal from "@/components/Modal";
+import {
+  incidentService,
+  type IncidentExportFormat,
+} from "@/lib/services/incidentService";
+
+const FORMAT_OPTIONS: Array<{
+  value: IncidentExportFormat;
+  label: string;
+  helper: string;
+}> = [
+  {
+    value: "csv",
+    label: "CSV",
+    helper: "Uniwersalny format do arkuszy i narzędzi BI.",
+  },
+  {
+    value: "excel",
+    label: "Excel (.xls)",
+    helper: "Tabela otwierana w Excelu oraz LibreOffice.",
+  },
+  {
+    value: "json",
+    label: "JSON",
+    helper: "Struktura danych do integracji z innymi systemami.",
+  },
+  {
+    value: "pdf",
+    label: "PDF",
+    helper: "Gotowy do druku raport z tabelą zgłoszeń.",
+  },
+];
 
 type ExportIncidentsModalProps = {
   isOpen: boolean;
@@ -21,10 +53,36 @@ export default function ExportIncidentsModal({
   recordLabel,
   hasIncidentsToExport,
 }: ExportIncidentsModalProps) {
+  const [selectedFormat, setSelectedFormat] = useState<IncidentExportFormat>("csv");
+
+  const confirmLabel = useMemo(() => {
+    switch (selectedFormat) {
+      case "excel":
+        return "Eksportuj Excel";
+      case "json":
+        return "Eksportuj JSON";
+      case "pdf":
+        return "Eksportuj PDF";
+      default:
+        return "Eksportuj CSV";
+    }
+  }, [selectedFormat]);
+
+  const handleConfirm = () => {
+    incidentService.setExportFormat(selectedFormat);
+    onConfirm();
+    setSelectedFormat("csv");
+  };
+
+  const handleClose = () => {
+    setSelectedFormat("csv");
+    onClose();
+  };
+
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title="Eksportuj listę zgłoszeń"
       description={`Obecny widok zawiera ${totalCount} ${recordLabel}. Eksport obejmie aktywne filtry i sortowanie.`}
     >
@@ -42,6 +100,38 @@ export default function ExportIncidentsModal({
               Brak zgłoszeń spełniających bieżące kryteria.
             </p>
           )}
+        </div>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-secondary">Format eksportu</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {FORMAT_OPTIONS.map((option) => {
+              const isChecked = selectedFormat === option.value;
+              return (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer flex-col rounded-lg border px-4 py-3 text-sm transition ${
+                    isChecked
+                      ? "border-(--color-accent) bg-(--color-accent-soft) text-foreground"
+                      : "border-subtle bg-surface text-secondary hover:border-(--color-border-strong)"
+                  } ${isExporting ? "cursor-not-allowed opacity-70" : ""}`}
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <input
+                      type="radio"
+                      name="export-format"
+                      value={option.value}
+                      checked={isChecked}
+                      disabled={isExporting}
+                      onChange={() => setSelectedFormat(option.value)}
+                      className="h-4 w-4"
+                    />
+                    {option.label}
+                  </span>
+                  <span className="mt-2 text-xs text-secondary">{option.helper}</span>
+                </label>
+              );
+            })}
+          </div>
         </div>
         <div className="space-y-2 rounded-xl border border-dashed border-subtle px-5 py-4 text-sm text-secondary">
           <p className="flex items-center gap-2">
@@ -84,18 +174,18 @@ export default function ExportIncidentsModal({
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="inline-flex items-center justify-center rounded-md border border-subtle px-5 py-2.5 text-sm font-semibold text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
           >
             Anuluj
           </button>
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={handleConfirm}
             disabled={!hasIncidentsToExport || isExporting}
             className={`inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold text-(--color-accent-text) transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${!hasIncidentsToExport || isExporting ? "bg-(--color-border) text-muted" : "bg-(--color-accent) hover:bg-(--color-accent-strong)"}`}
           >
-            {isExporting ? "Przygotowuję plik…" : "Eksportuj CSV"}
+            {isExporting ? "Przygotowuję plik…" : confirmLabel}
           </button>
         </div>
       </div>
