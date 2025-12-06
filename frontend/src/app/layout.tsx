@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ZANT",
+  title: "AccidentFlow",
   description: "System zgłaszania wypadków i incydentów w Zakładzie Ubezpieczeń Społecznych",
 };
 

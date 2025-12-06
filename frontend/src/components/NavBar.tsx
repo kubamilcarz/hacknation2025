@@ -44,7 +44,9 @@ export default function NavBar({ variant }: NavBarProps = {}) {
             />
           </div>
           <span className="mr-3 h-2 w-2 rounded-full bg-(--color-support)" aria-hidden="true" />
-          <span className="hidden text-sm font-semibold text-muted md:inline">ZANT</span>
+          <span className="hidden text-sm font-semibold text-muted md:inline">
+            AccidentFlow | {isEmployee ? "Panel Weryfikacji" : "Generator Zgłoszeń"}
+          </span>
         </Link>
  
         <div className="flex items-center gap-4">

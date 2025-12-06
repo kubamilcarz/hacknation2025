@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
 import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
@@ -62,6 +62,10 @@ export default function EmployeeDashboard() {
   const [filterStatus, setFilterStatus] = useState<IncidentStatus | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  const handleCreateIncident = useCallback(() => {
+    router.push('/dashboard/employee/new');
+  }, [router]);
 
   const getStatusBadge = useCallback((status: IncidentStatus) => {
     const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium';
@@ -390,6 +394,46 @@ export default function EmployeeDashboard() {
     });
   }, [columns, filterStatus, incidents, searchTerm, sortConfig]);
 
+  const showLoadingState = isLoading;
+  const showEmptyState = !isLoading && filteredIncidents.length === 0;
+  const isFallbackState = showLoadingState || showEmptyState;
+
+  const handleExportCsv = useCallback(() => {
+    if (filteredIncidents.length === 0) {
+      return;
+    }
+
+    const formatCsvField = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const header = [
+      'Numer sprawy',
+      'Tytuł',
+      'Zgłaszający',
+      'Kategoria',
+      'Priorytet',
+      'Status',
+      'Data',
+    ];
+
+    const rows = filteredIncidents.map((incident) => [
+      incident.caseNumber,
+      incident.title,
+      incident.reporterName,
+      incident.category,
+      priorityLabels[incident.priority],
+      statusLabels[incident.status],
+      formatDate(incident.createdAt),
+    ].map(formatCsvField).join(';'));
+
+    const csvContent = [header.map(formatCsvField).join(';'), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `lista-zgloszen-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [filteredIncidents, formatDate]);
+
   const handleSort = useCallback(
     (columnId: string) => {
       const column = columns.find((entry) => entry.id === columnId && entry.sortable);
@@ -532,12 +576,55 @@ export default function EmployeeDashboard() {
                 { labelKey: 'incident-list' },
               ]}
             />
-            <div>
-              <h1 className="text-3xl font-semibold text-primary">Lista zgłoszeń</h1>
-              <p className="mt-2 text-sm text-muted">
-                Przegląd zgłoszeń z wirtualnego asystenta. Obecnie korzystamy z danych testowych – po integracji
-                z backendem lista zostanie zsynchronizowana z systemami ZUS.
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h1 className="text-3xl font-semibold text-primary">Lista zgłoszeń</h1>
+                <p className="mt-2 text-sm text-muted">
+                  Przegląd zgłoszeń. Możesz filtrować, wyszukiwać i sortować zgłoszenia według różnych kryteriów.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={handleCreateIncident}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-(--color-accent) px-5 py-2.5 text-sm font-semibold text-(--color-accent-text) transition hover:bg-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M10 4v12" />
+                    <path d="M4 10h12" />
+                  </svg>
+                  Dodaj zgłoszenie
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle bg-surface px-5 py-2.5 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3H8a1 1 0 0 0-1 1v6H5.2a.2.2 0 0 0-.14.34l4.8 4.8a.2.2 0 0 0 .28 0l4.8-4.8a.2.2 0 0 0-.14-.34H13V4a1 1 0 0 0-1-1Z" />
+                    <path d="M5 17h10" />
+                  </svg>
+                  Eksportuj listę
+                </button>
+              </div>
             </div>
           </div>
 
@@ -575,34 +662,55 @@ export default function EmployeeDashboard() {
           </div>
 
           <div className="rounded-lg border border-subtle">
-            <div className="overflow-x-auto">
+            <div className={isFallbackState ? 'overflow-hidden' : 'overflow-x-auto'}>
               <table
-                className="w-full divide-y divide-subtle text-sm"
-                style={{ minWidth: `${columns.reduce((sum, column) => sum + getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH), 0)}px` }}
+                className={`w-full divide-y divide-subtle text-sm ${isFallbackState ? 'table-fixed' : ''}`}
+                style={
+                  isFallbackState
+                    ? undefined
+                    : {
+                        minWidth: `${columns.reduce(
+                          (sum, column) =>
+                            sum + getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH),
+                          0
+                        )}px`,
+                      }
+                }
               >
                 <thead className="bg-surface-subdued text-xs font-medium uppercase tracking-wide text-muted">
                   <tr>
                     {columns.map((column) => {
                       const isSortable = Boolean(column.sortable);
                       const isActiveSort = sortConfig?.columnId === column.id;
-                      const width = getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
+                      const width = isFallbackState
+                        ? undefined
+                        : getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
                       const stickyClassName =
                         column.sticky === 'left'
                           ? 'sticky left-0'
                           : column.sticky === 'right'
                             ? 'sticky right-0'
                             : '';
-                      const canResize = column.resizable !== false;
+                      const canResize = !isFallbackState && column.resizable !== false;
+                      const fallbackVisibilityClass =
+                        isFallbackState && column.id !== 'caseNumber' && column.id !== 'actions'
+                          ? 'hidden sm:table-cell'
+                          : '';
+                      const headerStyle: CSSProperties = {
+                        zIndex: column.sticky ? 10 : undefined,
+                        background: column.sticky ? 'var(--color-surface-subdued)' : undefined,
+                        height: '3rem',
+                        verticalAlign: 'middle',
+                      };
+                      if (width != null) {
+                        headerStyle.width = width;
+                        headerStyle.minWidth = width;
+                      }
                       return (
                         <th
                           key={column.id}
-                          className={`group relative px-3 py-2.5 ${stickyClassName} ${column.align === 'right' ? 'text-right' : 'text-left'} select-none`}
-                          style={{
-                            width,
-                            minWidth: width,
-                            zIndex: column.sticky ? 10 : undefined,
-                            background: column.sticky ? 'var(--color-surface-subdued)' : undefined,
-                          }}
+                          className={`group relative px-3 py-2.5 ${stickyClassName} ${fallbackVisibilityClass} ${column.align === 'right' ? 'text-right' : 'text-left'} select-none`}
+                          style={headerStyle}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <button
@@ -651,7 +759,9 @@ export default function EmployeeDashboard() {
                   {filteredIncidents.map((incident) => (
                     <tr key={incident.id} className="transition hover:bg-surface-subdued">
                       {columns.map((column) => {
-                        const width = getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
+                        const width = isFallbackState
+                          ? undefined
+                          : getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
                         const stickyClassName =
                           column.sticky === 'left'
                             ? 'sticky left-0'
@@ -664,16 +774,23 @@ export default function EmployeeDashboard() {
                         const isMenuOpenForRow = isActionsColumn && openActionMenuId === incident.id;
                         const baseZIndex = column.sticky ? 5 : undefined;
                         const cellZIndex = isMenuOpenForRow ? 80 : baseZIndex;
+                        const fallbackVisibilityClass =
+                          isFallbackState && column.id !== 'caseNumber' && column.id !== 'actions'
+                            ? 'hidden sm:table-cell'
+                            : '';
+                        const cellStyle: CSSProperties = {
+                          zIndex: cellZIndex,
+                          background: column.sticky ? 'var(--color-surface)' : undefined,
+                        };
+                        if (width != null) {
+                          cellStyle.width = width;
+                          cellStyle.minWidth = width;
+                        }
                         return (
                           <td
                             key={`${incident.id}-${column.id}`}
-                            className={`px-3 py-3 ${alignmentClass} ${stickyClassName} ${column.cellClassName ?? ''} ${isTextColumn ? 'overflow-hidden whitespace-nowrap' : ''}`.trim()}
-                            style={{
-                              width,
-                              minWidth: width,
-                              zIndex: cellZIndex,
-                              background: column.sticky ? 'var(--color-surface)' : undefined,
-                            }}
+                            className={`px-3 py-3 ${alignmentClass} ${stickyClassName} ${fallbackVisibilityClass} ${column.cellClassName ?? ''} ${isTextColumn ? 'overflow-hidden whitespace-nowrap' : ''}`.trim()}
+                            style={cellStyle}
                           >
                             {column.render(incident)}
                           </td>
@@ -682,21 +799,20 @@ export default function EmployeeDashboard() {
                     </tr>
                   ))}
 
-                  {!isLoading && filteredIncidents.length === 0 && (
+                  {(showEmptyState || showLoadingState) && (
                     <tr>
-                      <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-muted">
-                        Brak zgłoszeń spełniających kryteria wyszukiwania.
+                      <td
+                        colSpan={columns.length}
+                        className="p-0 align-middle"
+                        style={{ height: 'calc(3 * 3.75rem)' }}
+                      >
+                        <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
+                          {showLoadingState ? 'Trwa ładowanie danych testowych…' : 'Brak zgłoszeń spełniających kryteria wyszukiwania.'}
+                        </div>
                       </td>
                     </tr>
                   )}
 
-                  {isLoading && (
-                    <tr>
-                      <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-muted">
-                        Trwa ładowanie danych testowych…
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
