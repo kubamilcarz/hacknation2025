@@ -44,16 +44,106 @@ const steps: IncidentWizardStep[] = [
   },
 ];
 
-// Debug helper: flip to true when we need to bypass validation while iterating on UI.
-const letUserProceedWithEmptyFields = false;
+const INCIDENT_FIELD_KEYS = ['pesel', 'nr_dowodu', 'imie', 'nazwisko', 'numer_telefonu', 'ulica', 'szczegoly_okolicznosci'] as const;
+type IncidentFieldKey = (typeof INCIDENT_FIELD_KEYS)[number];
 
-const REQUIRED_FIELDS_BY_STEP: Record<IncidentWizardStep['id'], string[]> = {
-  identity: ['pesel', 'nr_dowodu', 'imie', 'nazwisko'],
-  residence: [],
+const STEP_FIELDS_BY_STEP: Record<IncidentWizardStep['id'], IncidentFieldKey[]> = {
+  identity: ['pesel', 'nr_dowodu', 'imie', 'nazwisko', 'numer_telefonu'],
+  residence: ['ulica'],
   accident: ['szczegoly_okolicznosci'],
   witnesses: [],
   review: [],
 };
+
+const REQUIRED_FIELD_MESSAGE = 'To pole jest wymagane.';
+
+const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | null> = {
+  pesel: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (!/^\d{11}$/.test(normalized)) {
+      return 'Numer PESEL musi składać się z 11 cyfr.';
+    }
+    return null;
+  },
+  nr_dowodu: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (!/^[A-Z]{3}\d{6}$/.test(normalized)) {
+      return 'Wpisz numer dokumentu w formacie ABC123456.';
+    }
+    return null;
+  },
+  imie: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (normalized.length < 2) {
+      return 'Imię musi mieć co najmniej 2 znaki.';
+    }
+    if (/\d/.test(normalized)) {
+      return 'Imię nie powinno zawierać cyfr.';
+    }
+    return null;
+  },
+  nazwisko: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (normalized.length < 2) {
+      return 'Nazwisko musi mieć co najmniej 2 znaki.';
+    }
+    if (/\d/.test(normalized)) {
+      return 'Nazwisko nie powinno zawierać cyfr.';
+    }
+    return null;
+  },
+  numer_telefonu: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    const digitsOnly = normalized.replace(/\D/g, '');
+    if (digitsOnly.length < 9 || digitsOnly.length > 15) {
+      return 'Numer telefonu powinien mieć od 9 do 15 cyfr.';
+    }
+    return null;
+  },
+  ulica: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized.length < 3) {
+      return 'Ulica musi mieć co najmniej 3 znaki.';
+    }
+    return null;
+  },
+  szczegoly_okolicznosci: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (normalized.length < 20) {
+      return 'Dodaj więcej szczegółów (min. 20 znaków).';
+    }
+    return null;
+  },
+};
+
+const incidentFieldKeySet = new Set<IncidentFieldKey>(INCIDENT_FIELD_KEYS);
+
+const isIncidentFieldKey = (field: keyof CreateDocumentInput): field is IncidentFieldKey =>
+  incidentFieldKeySet.has(field as IncidentFieldKey);
+
+// Debug helper: flip to true when we need to bypass validation while iterating on UI.
+const letUserProceedWithEmptyFields = false;
 
 const createInitialIncidentDraft = (): CreateDocumentInput => ({
   ...defaultDocumentData,
@@ -79,8 +169,32 @@ export default function UserDashboard() {
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const clearFieldError = (fieldName: string) => {
+  const currentStep = useMemo(() => steps[currentStepIndex] ?? steps[0], [currentStepIndex]);
+
+  const fieldValueLookup: Record<IncidentFieldKey, string> = {
+    pesel: incidentDraft.pesel ?? '',
+    nr_dowodu: incidentDraft.nr_dowodu ?? '',
+    imie: incidentDraft.imie ?? '',
+    nazwisko: incidentDraft.nazwisko ?? '',
+    numer_telefonu: incidentDraft.numer_telefonu ?? '',
+    ulica: incidentDraft.ulica ?? '',
+    szczegoly_okolicznosci: incidentDraft.szczegoly_okolicznosci ?? '',
+  };
+
+  const getFieldErrorMessage = (fieldName: IncidentFieldKey, rawValue: string) => {
+    const validator = FIELD_VALIDATORS[fieldName];
+    return validator ? validator(rawValue ?? '') : null;
+  };
+
+  const applyValidationResult = (fieldName: IncidentFieldKey, errorMessage: string | null) => {
     setValidationErrors((prev) => {
+      if (errorMessage) {
+        if (prev[fieldName] === errorMessage) {
+          return prev;
+        }
+        return { ...prev, [fieldName]: errorMessage };
+      }
+
       if (!(fieldName in prev)) {
         return prev;
       }
@@ -91,13 +205,48 @@ export default function UserDashboard() {
     });
   };
 
+  const runFieldValidation = (fieldName: IncidentFieldKey, rawValue: string) => {
+    const errorMessage = getFieldErrorMessage(fieldName, rawValue);
+    applyValidationResult(fieldName, errorMessage);
+    return !errorMessage;
+  };
+
+  const isStepValid = (stepId: IncidentWizardStep['id']) => {
+    const fields = STEP_FIELDS_BY_STEP[stepId] ?? [];
+    return fields.every((fieldName) => {
+      const value = fieldValueLookup[fieldName] ?? '';
+      return !getFieldErrorMessage(fieldName, value);
+    });
+  };
+
+  const validateStepFields = (stepId: IncidentWizardStep['id']) => {
+    const fields = STEP_FIELDS_BY_STEP[stepId] ?? [];
+    let isValid = true;
+
+    fields.forEach((fieldName) => {
+      const value = fieldValueLookup[fieldName] ?? '';
+      const errorMessage = getFieldErrorMessage(fieldName, value);
+      if (errorMessage) {
+        isValid = false;
+      }
+      applyValidationResult(fieldName, errorMessage);
+    });
+
+    return isValid;
+  };
+
   const updateDraftField = <Key extends keyof CreateDocumentInput>(field: Key) =>
     (value: CreateDocumentInput[Key]) => {
       setIncidentDraft((prev) => ({
         ...prev,
         [field]: value,
       }));
-      clearFieldError(field as string);
+
+      if (isIncidentFieldKey(field)) {
+        const nextValue = typeof value === 'string' ? value : value == null ? '' : String(value);
+        runFieldValidation(field, nextValue);
+      }
+
       let shouldResetError = false;
       setSubmitState((current) => {
         if (current === 'submitting') {
@@ -110,6 +259,7 @@ export default function UserDashboard() {
 
         return 'idle';
       });
+
       if (shouldResetError) {
         setSubmitError(null);
       }
@@ -127,28 +277,7 @@ export default function UserDashboard() {
       updateDraftField(field)(event.target.value as CreateDocumentInput[Key]);
     };
 
-  const currentStep = useMemo(() => steps[currentStepIndex] ?? steps[0], [currentStepIndex]);
-
-  const fieldValueLookup: Record<string, string> = {
-    pesel: incidentDraft.pesel ?? '',
-    nr_dowodu: incidentDraft.nr_dowodu ?? '',
-    imie: incidentDraft.imie ?? '',
-    nazwisko: incidentDraft.nazwisko ?? '',
-    numer_telefonu: incidentDraft.numer_telefonu ?? '',
-    ulica: incidentDraft.ulica ?? '',
-    szczegoly_okolicznosci: incidentDraft.szczegoly_okolicznosci ?? '',
-  };
-
-  const getMissingFields = (stepId: IncidentWizardStep['id']) => {
-    const requiredFields = REQUIRED_FIELDS_BY_STEP[stepId] ?? [];
-    return requiredFields.filter((fieldName) => {
-      const value = fieldValueLookup[fieldName];
-      return !value || value.trim().length === 0;
-    });
-  };
-
-  const missingFieldsForCurrentStep = getMissingFields(currentStep.id);
-  const isCurrentStepValid = missingFieldsForCurrentStep.length === 0;
+  const isCurrentStepValid = isStepValid(currentStep.id);
   const hasNextStep = currentStepIndex < steps.length - 1;
   const isLastStep = currentStepIndex === steps.length - 1;
   const isSubmitting = submitState === 'submitting';
@@ -166,25 +295,13 @@ export default function UserDashboard() {
       return true;
     }
 
-    const missingFields = getMissingFields(currentStep.id);
-    if (missingFields.length === 0) {
-      return true;
-    }
-
-    setValidationErrors((prev) => {
-      const next = { ...prev };
-      missingFields.forEach((fieldName) => {
-        if (!next[fieldName]) {
-          next[fieldName] = 'To pole jest wymagane.';
-        }
-      });
-      return next;
-    });
-    return false;
+    return validateStepFields(currentStep.id);
   };
 
   const handleSubmit = async () => {
-  
+    if (hasSubmittedSuccessfully || isSubmitting) {
+      return;
+    }
 
     setSubmitState('submitting');
     setSubmitError(null);
@@ -226,6 +343,13 @@ export default function UserDashboard() {
     const targetIndex = steps.findIndex((step) => step.id === stepId);
     if (targetIndex === -1 || targetIndex === currentStepIndex || targetIndex > furthestStepIndex) {
       return;
+    }
+
+    if (!letUserProceedWithEmptyFields && targetIndex > currentStepIndex) {
+      const currentValid = validateStepFields(currentStep.id);
+      if (!currentValid) {
+        return;
+      }
     }
 
     setCurrentStepIndex(targetIndex);
