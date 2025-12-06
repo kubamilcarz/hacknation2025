@@ -10,9 +10,9 @@ interface BreadcrumbItem {
 }
 
 const labelTranslations: Record<string, string> = {
-  home: 'Strona główna',
+  home: 'Generator zgłoszeń',
   'report-incident': 'Zgłoszenie zdarzenia',
-  panel: 'Panel pracownika',
+  panel: 'Panel weryfikacji',
   'incident-list': 'Lista zgłoszeń',
   report: 'Zgłoszenie',
 };

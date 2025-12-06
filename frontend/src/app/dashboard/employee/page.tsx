@@ -1,12 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  CSSProperties,
+  ChangeEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
 import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import Footer from '@/components/Footer';
+import { Pagination } from '@/components/Pagination';
+
+const VALID_STATUS_VALUES: IncidentStatus[] = ['pending', 'in-progress', 'resolved', 'rejected'];
+
+const isIncidentStatusValue = (value: string | null): value is IncidentStatus =>
+  value != null && VALID_STATUS_VALUES.includes(value as IncidentStatus);
+
+const isSortDirectionValue = (value: string | null): value is 'asc' | 'desc' =>
+  value === 'asc' || value === 'desc';
 
 const statusLabels: Record<IncidentStatus, string> = {
   pending: 'Oczekujące',
@@ -36,6 +51,8 @@ const statusRank: Record<IncidentStatus, number> = {
   rejected: 4,
 };
 
+const PAGE_SIZE = 10;
+
 const MIN_COLUMN_WIDTH = 140;
 const TEXT_COLUMN_IDS = new Set(['caseNumber', 'title', 'reporterName', 'category']);
 
@@ -58,9 +75,18 @@ type SortConfig = { columnId: string; direction: 'asc' | 'desc' } | null;
 
 export default function EmployeeDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { incidents, isLoading } = useIncidents();
-  const [filterStatus, setFilterStatus] = useState<IncidentStatus | 'all'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const statusParam = searchParams.get('status');
+  const initialFilterStatus: IncidentStatus | 'all' = isIncidentStatusValue(statusParam) ? statusParam : 'all';
+  const initialSearchTerm = searchParams.get('search') ?? '';
+  const [filterStatus, setFilterStatus] = useState<IncidentStatus | 'all'>(initialFilterStatus);
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+  const searchCommittedValueRef = useRef<string | null>(
+    initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
+  );
+  const pageHydrationRef = useRef(false);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   const handleCreateIncident = useCallback(() => {
@@ -314,13 +340,29 @@ export default function EmployeeDashboard() {
     [formatDate, getPriorityBadge, getStatusBadge, renderActionsCell]
   );
 
-  const [sortConfig, setSortConfig] = useState<SortConfig>(() => {
+  const computeDefaultSortConfig = useCallback((): SortConfig => {
     const defaultSorted = columns.find((column) => column.sortable && column.defaultSortDirection);
     if (defaultSorted && defaultSorted.defaultSortDirection) {
       return { columnId: defaultSorted.id, direction: defaultSorted.defaultSortDirection };
     }
     const firstSortable = columns.find((column) => column.sortable);
     return firstSortable ? { columnId: firstSortable.id, direction: 'asc' } : null;
+  }, [columns]);
+
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => {
+    const sortParam = searchParams.get('sort');
+    const directionParam = searchParams.get('direction');
+    if (sortParam) {
+      const column = columns.find((entry) => entry.id === sortParam && entry.sortable);
+      if (column) {
+        const nextDirection = isSortDirectionValue(directionParam)
+          ? directionParam
+          : column.defaultSortDirection ?? 'asc';
+        return { columnId: column.id, direction: nextDirection };
+      }
+    }
+
+    return computeDefaultSortConfig();
   });
 
   const filteredIncidents = useMemo(() => {
@@ -394,9 +436,239 @@ export default function EmployeeDashboard() {
     });
   }, [columns, filterStatus, incidents, searchTerm, sortConfig]);
 
+  const searchParamsString = searchParams.toString();
+  const commitQueryParams = useCallback(
+    (updates: Record<string, string | null | undefined>) => {
+      const params = new URLSearchParams(searchParamsString);
+      let didChange = false;
+
+      Object.entries(updates).forEach(([key, value]) => {
+        const nextValue = value ?? null;
+        const currentValue = params.get(key);
+
+        if (nextValue === null) {
+          if (currentValue !== null) {
+            params.delete(key);
+            didChange = true;
+          }
+          return;
+        }
+
+        if (currentValue !== nextValue) {
+          params.set(key, nextValue);
+          didChange = true;
+        }
+      });
+
+      if (!didChange) {
+        return;
+      }
+
+      const queryString = params.toString();
+      const nextUrl = queryString ? `${pathname}?${queryString}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    },
+    [pathname, router, searchParamsString]
+  );
+
+  const totalItems = filteredIncidents.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const rawPageParam = searchParams.get('page');
+  const parsedPageParam = rawPageParam ? Number.parseInt(rawPageParam, 10) : NaN;
+  const requestedPage = Number.isNaN(parsedPageParam) ? 1 : parsedPageParam;
+  const normalizedRequestedPage = requestedPage < 1 ? 1 : requestedPage;
+  const currentPage = Math.min(totalPages, normalizedRequestedPage);
+  const firstItemIndex = (currentPage - 1) * PAGE_SIZE;
+  const paginatedIncidents = useMemo(
+    () => filteredIncidents.slice(firstItemIndex, firstItemIndex + PAGE_SIZE),
+    [filteredIncidents, firstItemIndex]
+  );
+  const hasResults = totalItems > 0;
+  const displayRangeStart = hasResults ? firstItemIndex + 1 : 0;
+  const displayRangeEnd = hasResults ? Math.min(totalItems, firstItemIndex + PAGE_SIZE) : 0;
+
   const showLoadingState = isLoading;
-  const showEmptyState = !isLoading && filteredIncidents.length === 0;
+  const showEmptyState = !isLoading && totalItems === 0;
   const isFallbackState = showLoadingState || showEmptyState;
+
+  const commitSearchTerm = useCallback(
+    (value?: string) => {
+      const nextValue = value ?? searchTerm;
+      const normalized = nextValue.trim();
+      const canonical = normalized.length > 0 ? normalized : null;
+      if (searchCommittedValueRef.current === canonical) {
+        return;
+      }
+
+      searchCommittedValueRef.current = canonical;
+      setOpenActionMenuId(null);
+      commitQueryParams({
+        search: canonical,
+        page: null,
+      });
+    },
+    [commitQueryParams, searchTerm]
+  );
+
+  useEffect(() => {
+    if (!pageHydrationRef.current) {
+      pageHydrationRef.current = true;
+      return;
+    }
+
+    if (isLoading) {
+      return;
+    }
+
+    const desiredPage = currentPage;
+    const desiredValue = desiredPage <= 1 ? null : String(desiredPage);
+    const currentValue = rawPageParam ?? null;
+
+    if (desiredValue === currentValue) {
+      return;
+    }
+
+    commitQueryParams({ page: desiredValue });
+  }, [commitQueryParams, currentPage, isLoading, rawPageParam]);
+
+  const handlePageChange = useCallback(
+    (page: number) => {
+      commitSearchTerm();
+      setOpenActionMenuId(null);
+      const normalizedTarget = Math.max(1, Math.min(totalPages, Math.floor(page)));
+      const desiredValue = normalizedTarget <= 1 ? null : String(normalizedTarget);
+      const currentValue = rawPageParam ?? null;
+      if (desiredValue === currentValue) {
+        return;
+      }
+      commitQueryParams({ page: desiredValue });
+    },
+    [commitQueryParams, commitSearchTerm, rawPageParam, totalPages]
+  );
+
+  const handleSearchInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setOpenActionMenuId(null);
+      setSearchTerm(value);
+    },
+    []
+  );
+
+  const handleSearchInputBlur = useCallback(() => {
+    commitSearchTerm();
+  }, [commitSearchTerm]);
+
+  const handleSearchInputKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+        commitSearchTerm(event.currentTarget.value);
+      }
+    },
+    [commitSearchTerm]
+  );
+
+  const handleStatusChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value;
+      const normalized: IncidentStatus | 'all' =
+        value === 'all' ? 'all' : isIncidentStatusValue(value) ? (value as IncidentStatus) : 'all';
+      commitSearchTerm();
+      setFilterStatus(normalized);
+      setOpenActionMenuId(null);
+      commitQueryParams({
+        status: normalized === 'all' ? null : normalized,
+        page: null,
+      });
+    },
+    [commitQueryParams, commitSearchTerm]
+  );
+
+  useEffect(() => {
+    const currentParams = new URLSearchParams(searchParamsString);
+    const rawSearchParam = currentParams.get('search');
+    const normalizedSearchParam = rawSearchParam?.trim() ?? '';
+    const canonicalValue = normalizedSearchParam.length > 0 ? normalizedSearchParam : null;
+
+    if (rawSearchParam && rawSearchParam !== normalizedSearchParam) {
+      searchCommittedValueRef.current = canonicalValue;
+      commitQueryParams({ search: canonicalValue });
+      return;
+    }
+
+    if (searchCommittedValueRef.current !== canonicalValue) {
+      searchCommittedValueRef.current = canonicalValue;
+    }
+
+    startTransition(() => {
+      setSearchTerm((currentValue) => {
+        if (currentValue === normalizedSearchParam) {
+          return currentValue;
+        }
+        return normalizedSearchParam;
+      });
+    });
+  }, [commitQueryParams, searchParamsString]);
+
+
+  useEffect(() => {
+    const nextStatusParam = searchParams.get('status');
+    const normalizedStatus: IncidentStatus | 'all' = isIncidentStatusValue(nextStatusParam)
+      ? nextStatusParam
+      : 'all';
+
+    if (!isIncidentStatusValue(nextStatusParam) && nextStatusParam != null && nextStatusParam !== 'all') {
+      commitQueryParams({ status: normalizedStatus === 'all' ? null : normalizedStatus });
+      return;
+    }
+
+    if (normalizedStatus !== filterStatus) {
+      startTransition(() => {
+        setFilterStatus(normalizedStatus);
+      });
+    }
+  }, [commitQueryParams, filterStatus, searchParams]);
+
+  useEffect(() => {
+    const sortParam = searchParams.get('sort');
+    const directionParam = searchParams.get('direction');
+    let nextSortConfig = null as SortConfig;
+
+    if (sortParam) {
+      const column = columns.find((entry) => entry.id === sortParam && entry.sortable);
+      if (column) {
+        const nextDirection = isSortDirectionValue(directionParam)
+          ? directionParam
+          : column.defaultSortDirection ?? 'asc';
+        nextSortConfig = { columnId: column.id, direction: nextDirection };
+      }
+    }
+
+    if (!nextSortConfig) {
+      nextSortConfig = computeDefaultSortConfig();
+    }
+
+    const hasChanged =
+      (sortConfig?.columnId ?? null) !== (nextSortConfig?.columnId ?? null) ||
+      (sortConfig?.direction ?? null) !== (nextSortConfig?.direction ?? null);
+
+    if (hasChanged) {
+      startTransition(() => {
+        setSortConfig(nextSortConfig);
+      });
+    }
+    const canonicalSort = nextSortConfig?.columnId ?? null;
+    const canonicalDirection = nextSortConfig?.direction ?? null;
+    const currentSortParam = sortParam ?? null;
+    const currentDirectionParam = isSortDirectionValue(directionParam) ? directionParam : null;
+
+    if (canonicalSort !== currentSortParam || canonicalDirection !== currentDirectionParam) {
+      commitQueryParams({
+        sort: canonicalSort,
+        direction: canonicalDirection,
+      });
+    }
+  }, [columns, commitQueryParams, computeDefaultSortConfig, searchParams, sortConfig]);
 
   const handleExportCsv = useCallback(() => {
     if (filteredIncidents.length === 0) {
@@ -441,15 +713,29 @@ export default function EmployeeDashboard() {
         return;
       }
 
-      setSortConfig((current) => {
-        if (!current || current.columnId !== columnId) {
-          return { columnId, direction: column.defaultSortDirection ?? 'asc' };
-        }
+      const defaultDirection = column.defaultSortDirection ?? 'asc';
+      const isSameColumn = sortConfig?.columnId === columnId;
+      const nextDirection = isSameColumn
+        ? sortConfig?.direction === 'asc'
+          ? 'desc'
+          : 'asc'
+        : defaultDirection;
+      const nextConfig: SortConfig = { columnId, direction: nextDirection };
 
-        return { columnId, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+      if (isSameColumn && sortConfig?.direction === nextDirection) {
+        return;
+      }
+
+      commitSearchTerm();
+      setSortConfig(nextConfig);
+      setOpenActionMenuId(null);
+      commitQueryParams({
+        sort: columnId,
+        direction: nextDirection,
+        page: null,
       });
     },
-    [columns]
+    [columns, commitQueryParams, commitSearchTerm, sortConfig]
   );
 
 
@@ -634,7 +920,9 @@ export default function EmployeeDashboard() {
                 type="search"
                 placeholder="Szukaj po tytule, nazwisku, e-mailu lub numerze sprawy"
                 value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
+                onChange={handleSearchInputChange}
+                onBlur={handleSearchInputBlur}
+                onKeyDown={handleSearchInputKeyDown}
                 className="flex-1 rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
               />
             </div>
@@ -645,7 +933,7 @@ export default function EmployeeDashboard() {
               <select
                 id="status"
                 value={filterStatus}
-                onChange={(event) => setFilterStatus(event.target.value as IncidentStatus | 'all')}
+                onChange={handleStatusChange}
                 className="rounded-md border border-subtle bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
               >
                 <option value="all">Wszystkie</option>
@@ -658,7 +946,11 @@ export default function EmployeeDashboard() {
           </div>
 
           <div className="mb-4 text-sm text-muted">
-            {isLoading ? 'Ładowanie danych…' : `Wyświetlono ${filteredIncidents.length} z ${incidents.length} zgłoszeń`}
+            {isLoading
+              ? 'Ładowanie danych…'
+              : totalItems === 0
+                ? 'Brak zgłoszeń spełniających kryteria wyszukiwania.'
+                : `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalItems} zgłoszeń (łącznie ${incidents.length})`}
           </div>
 
           <div className="rounded-lg border border-subtle">
@@ -756,7 +1048,7 @@ export default function EmployeeDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-subtle bg-surface">
-                  {filteredIncidents.map((incident) => (
+                  {paginatedIncidents.map((incident) => (
                     <tr key={incident.id} className="transition hover:bg-surface-subdued">
                       {columns.map((column) => {
                         const width = isFallbackState
@@ -817,6 +1109,14 @@ export default function EmployeeDashboard() {
               </table>
             </div>
           </div>
+          {totalItems > 0 && (
+          <Pagination
+            className="mt-6"
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
+        )}
         </div>
         <Footer router={router} showPanelButton={false} />
       </div>

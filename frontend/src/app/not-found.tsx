@@ -28,7 +28,7 @@ export default function NotFound() {
             href="/dashboard/employee"
             className="inline-flex items-center justify-center rounded-md border border-subtle px-6 py-2.5 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
           >
-            Panel pracownika ZUS
+            Panel weryfikacji
           </Link>
         </div>
 
