@@ -28,6 +28,7 @@ interface IncidentContextValue {
   page: number;
   pageSize: number;
   isLoading: boolean;
+  hasLoaded: boolean;
   error: string | null;
   loadIncidents: (options?: IncidentListOptions) => Promise<IncidentListResponse | null>;
   refresh: () => Promise<void>;
@@ -47,8 +48,13 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const lastOptionsRef = useRef<IncidentListOptions | undefined>(undefined);
+  const activeRequestIdRef = useRef(0);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const loadIncidents = useCallback(async (options?: IncidentListOptions) => {
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+
     setIsLoading(true);
     setError(null);
     const mergedOptions = {
@@ -59,6 +65,10 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
 
     try {
       const response = await incidentService.list(mergedOptions);
+      if (activeRequestIdRef.current !== requestId) {
+        return null;
+      }
+
       lastOptionsRef.current = {
         ...mergedOptions,
         page: response.page,
@@ -69,13 +79,18 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       setTotalPages(response.totalPages);
       setPage(response.page);
       setPageSize(response.pageSize);
+      setHasLoaded(true);
       return response;
     } catch (err) {
       console.error(err);
-      setError("Nie udało się pobrać zgłoszeń.");
+      if (activeRequestIdRef.current === requestId) {
+        setError("Nie udało się pobrać zgłoszeń.");
+      }
       return null;
     } finally {
-      setIsLoading(false);
+      if (activeRequestIdRef.current === requestId) {
+        setIsLoading(false);
+      }
     }
   }, [pageSize]);
 
@@ -118,6 +133,7 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       page,
       pageSize,
       isLoading,
+      hasLoaded,
       error,
       loadIncidents,
       refresh: async () => {
@@ -134,6 +150,7 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       page,
       pageSize,
       isLoading,
+      hasLoaded,
       error,
       loadIncidents,
       createIncident,

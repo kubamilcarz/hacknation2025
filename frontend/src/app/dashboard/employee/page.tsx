@@ -77,6 +77,14 @@ type ColumnDefinition = {
 
 type SortConfig = { columnId: string; direction: 'asc' | 'desc' } | null;
 
+const Spinner = ({ size = 24, className = '' }: { size?: number; className?: string }) => (
+  <span
+    className={`inline-block animate-spin rounded-full border-2 border-(--color-accent) border-t-transparent ${className}`}
+    style={{ width: size, height: size }}
+    aria-hidden="true"
+  />
+);
+
 export default function EmployeeDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,8 +97,10 @@ export default function EmployeeDashboard() {
     page: currentServicePage,
     pageSize: currentPageSize,
     loadIncidents,
+    error,
   } = incidentsContext;
   const totalCount = incidentsContext.totalCount;
+  const hasLoaded = incidentsContext.hasLoaded;
   const statusParam = searchParams.get('status');
   const initialFilterStatus: IncidentStatus | 'all' = isIncidentStatusValue(statusParam) ? statusParam : 'all';
   const initialSearchTerm = searchParams.get('search') ?? '';
@@ -99,7 +109,6 @@ export default function EmployeeDashboard() {
   const searchCommittedValueRef = useRef<string | null>(
     initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
   );
-  const pageHydrationRef = useRef(false);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   const handleCreateIncident = useCallback(() => {
@@ -428,9 +437,28 @@ export default function EmployeeDashboard() {
     ? Math.min(totalCount, firstItemIndex + incidents.length)
     : 0;
 
-  const showLoadingState = isLoading;
-  const showEmptyState = !isLoading && totalCount === 0;
+  const isInitialLoad = !hasLoaded && isLoading;
+  const isRefetching = hasLoaded && isLoading;
+  const showLoadingState = isInitialLoad;
+  const showEmptyState = hasLoaded && !isLoading && totalCount === 0;
   const isFallbackState = showLoadingState || showEmptyState;
+  const shouldReserveLoadingSpace = isInitialLoad || (isRefetching && incidents.length === 0);
+  const tableContainerClassName = `relative rounded-lg border border-subtle${shouldReserveLoadingSpace ? ' min-h-[12rem]' : ''}`;
+  const summaryMessage = (() => {
+    if (error) {
+      return error;
+    }
+    if (isInitialLoad) {
+      return 'Ładowanie danych…';
+    }
+    if (isRefetching) {
+      return 'Aktualizuję dane…';
+    }
+    if (totalCount === 0) {
+      return null;
+    }
+    return `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalCount} zgłoszeń (łącznie ${incidents.length})`;
+  })();
 
   useEffect(() => {
     const params = new URLSearchParams(searchParamsString);
@@ -505,17 +533,11 @@ export default function EmployeeDashboard() {
   );
 
   useEffect(() => {
-    if (!pageHydrationRef.current) {
-      pageHydrationRef.current = true;
+    if (!hasLoaded || isLoading) {
       return;
     }
 
-    if (isLoading) {
-      return;
-    }
-
-    const desiredPage = currentPage;
-    const desiredValue = desiredPage <= 1 ? null : String(desiredPage);
+    const desiredValue = currentServicePage <= 1 ? null : String(currentServicePage);
     const currentValue = rawPageParam ?? null;
 
     if (desiredValue === currentValue) {
@@ -523,7 +545,7 @@ export default function EmployeeDashboard() {
     }
 
     commitQueryParams({ page: desiredValue });
-  }, [commitQueryParams, currentPage, isLoading, rawPageParam]);
+  }, [commitQueryParams, currentServicePage, hasLoaded, isLoading, rawPageParam]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -929,7 +951,7 @@ export default function EmployeeDashboard() {
           </div>
 
           <div className="mb-6 flex flex-col gap-4 border border-subtle bg-surface-subdued p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <div className="flex w-full gap-3 sm:flex-1">
+            <div className="flex w-full items-center gap-3 sm:flex-1">
               <input
                 type="search"
                 placeholder="Szukaj po tytule, nazwisku, e-mailu lub numerze sprawy"
@@ -959,15 +981,17 @@ export default function EmployeeDashboard() {
             </div>
           </div>
 
-          <div className="mb-4 text-sm text-muted">
-              {isLoading
-                ? 'Ładowanie danych…'
-                : totalCount === 0
-                  ? 'Brak zgłoszeń spełniających kryteria wyszukiwania.'
-                  : `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalCount} zgłoszeń (łącznie ${incidents.length})`}
+          <div className="mb-4 flex items-center gap-3 text-sm text-muted">
+            {summaryMessage && <span>{summaryMessage}</span>}
           </div>
 
-          <div className="rounded-lg border border-subtle">
+          <div className={tableContainerClassName}>
+            {isRefetching && !error && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/10 backdrop-blur-sm">
+                <Spinner size={36} className="border-[3px]" />
+                <span className="text-sm text-secondary">Aktualizuję dane…</span>
+              </div>
+            )}
             <div className={isFallbackState ? 'overflow-hidden' : 'overflow-x-auto'}>
               <table
                 className={`w-full divide-y divide-subtle text-sm ${isFallbackState ? 'table-fixed' : ''}`}
@@ -1105,15 +1129,24 @@ export default function EmployeeDashboard() {
                     </tr>
                   ))}
 
-                  {(showEmptyState || showLoadingState) && (
+        {(showEmptyState || showLoadingState || error) && (
                     <tr>
                       <td
                         colSpan={columns.length}
                         className="p-0 align-middle"
                         style={{ height: 'calc(3 * 3.75rem)' }}
                       >
-                        <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
-                          {showLoadingState ? 'Trwa ładowanie danych testowych…' : 'Brak zgłoszeń spełniających kryteria wyszukiwania.'}
+                <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-sm text-muted">
+                  {showLoadingState && !error ? (
+                    <>
+                      <Spinner size={32} className="border-[3px]" />
+                      <span>Ładowanie danych…</span>
+                    </>
+                  ) : error ? (
+                    <span className="text-sm text-error">{error}</span>
+                  ) : (
+                    'Brak zgłoszeń spełniających kryteria wyszukiwania.'
+                  )}
                         </div>
                       </td>
                     </tr>
