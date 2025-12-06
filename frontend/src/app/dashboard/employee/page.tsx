@@ -101,8 +101,8 @@ export default function EmployeeDashboard() {
             </div>
           </div>
 
-          <div className="mb-6 flex flex-col gap-4 border border-subtle bg-surface-subdued p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex w-full gap-3 sm:w-2/3">
+          <div className="mb-6 flex flex-col gap-4 border border-subtle bg-surface-subdued p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="flex w-full gap-3 sm:flex-1">
               <input
                 type="search"
                 placeholder="Szukaj po tytule, nazwisku, e-mailu lub numerze sprawy"

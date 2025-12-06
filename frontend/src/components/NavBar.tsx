@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AccessibilityToolbar from "./AccessibilityToolbar";
+import { useRouter } from "next/navigation";
+import { useSession } from "@/context/SessionContext";
 
 type NavBarProps = {
   variant?: "default" | "employee";
@@ -13,6 +15,16 @@ export default function NavBar({ variant }: NavBarProps = {}) {
   const pathname = usePathname();
   const resolvedVariant = variant ?? (pathname?.startsWith("/dashboard/employee") ? "employee" : "default");
   const isEmployee = resolvedVariant === "employee";
+  const router = useRouter();
+  const { resetSessionUserId, isSessionUserReady } = useSession();
+
+  const handleLogout = () => {
+    if (isSessionUserReady) {
+      resetSessionUserId();
+    }
+
+    void router.push("/");
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-subtle bg-surface/95 backdrop-blur supports-backdrop-filter:bg-surface/75">
@@ -37,12 +49,13 @@ export default function NavBar({ variant }: NavBarProps = {}) {
  
         <div className="flex items-center gap-4">
           {isEmployee && (
-            <Link
-              href="/"
+            <button
+              type="button"
+              onClick={handleLogout}
               className="inline-flex items-center justify-center rounded-md border border-subtle bg-surface px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
             >
               Wyloguj
-            </Link>
+            </button>
           )}
           <AccessibilityToolbar variant="inline" />
         </div>
