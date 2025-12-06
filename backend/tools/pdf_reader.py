@@ -1,5 +1,6 @@
 import os
 from PyPDF2 import PdfReader
+from django.core.files.uploadedfile import UploadedFile
 
 
 class PDFReader:
@@ -34,3 +35,8 @@ class PDFReader:
             raise e
         except Exception as e:
             raise Exception(f"Error processing PDF file: {str(e)}")
+
+    @staticmethod
+    def read_input_fields(pdf: UploadedFile) -> dict:
+        """Read form fields from PDF template"""
+        return PdfReader(pdf).get_form_text_fields()

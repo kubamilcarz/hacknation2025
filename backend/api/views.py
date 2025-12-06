@@ -7,6 +7,8 @@ from rest_framework.response import Response
 
 from api.models import Document
 from api.serializers import DocumentSerializer
+from tools.pdf_mapper import map_pdf_fields_to_document_data
+from tools.pdf_reader import PDFReader
 from tools.pdf_writer import PDFWriter
 
 
@@ -38,3 +40,11 @@ def generate_pdf_view(request):
     response = HttpResponse(pdf_io.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = "attachment; filename=filled.pdf"
     return response
+
+
+def read_document_from_pdf_view(request):
+    pdf = request.FILES["pdf"]
+    reader = PDFReader()
+    document = map_pdf_fields_to_document_data(reader.read_input_fields(pdf))
+    serializer = DocumentSerializer(document)
+    return Response(serializer.data)
