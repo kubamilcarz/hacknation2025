@@ -17,6 +17,33 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+def _fmt_date(value: Any) -> str:
+    """Format dates for PDF as ddmmyyyy (no separators).
+
+    Accepts date, datetime, or string. If string, try several common formats.
+    Returns empty string for None/empty input, or the original string if parsing fails.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.date().strftime("%d%m%Y")
+    if isinstance(value, date):
+        return value.strftime("%d%m%Y")
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return ""
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d", "%d-%m-%Y", "%d%m%Y"):
+            try:
+                return datetime.strptime(s, fmt).date().strftime("%d%m%Y")
+            except ValueError:
+                continue
+        # Could not parse — return as-is (better to see original than blank)
+        return s
+    # Fallback to string conversion
+    return str(value)
+
+
 def map_document_to_pdf_fields(document: Document) -> Dict[str, str]:
     """Map a Document instance to PDF AcroForm field names.
 
@@ -30,7 +57,7 @@ def map_document_to_pdf_fields(document: Document) -> Dict[str, str]:
     data["Rodzajseriainumerdokumentu[0]"] = _fmt(document.nr_dowodu)
     data["Imię[0]"] = _fmt(document.imie)
     data["Nazwisko[0]"] = _fmt(document.nazwisko)
-    data["Dataurodzenia[0]"] = _fmt(document.data_urodzenia)
+    data["Dataurodzenia[0]"] = _fmt_date(document.data_urodzenia)
     data["Miejsceurodzenia[0]"] = _fmt(document.miejsce_urodzenia)
     data["Numertelefonu[0]"] = _fmt(document.numer_telefonu)
 
@@ -87,7 +114,7 @@ def map_document_to_pdf_fields(document: Document) -> Dict[str, str]:
     data["Poczta2[1]"] = _fmt(document.miejscowosc_zglaszajacego_ostatniego_zamieszkania)
 
     # Informacje o wypadku
-    data["Datawyp[0]"] = _fmt(document.data_wypadku)
+    data["Datawyp[0]"] = _fmt_date(document.data_wypadku)
     data["Godzina[0]"] = _fmt(document.godzina_wypadku)
     data["Miejscewyp[0]"] = _fmt(document.miejsce_wypadku)
     data["Godzina3A[0]"] = _fmt(document.planowana_godzina_rozpoczecia_pracy)
@@ -197,7 +224,7 @@ def _parse_date(val: str) -> date | None:
     if not val:
         return None
     s = val.strip()
-    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d"):
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d", "%d-%m-%Y", "%d%m%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:

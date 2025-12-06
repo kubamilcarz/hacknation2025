@@ -1,4 +1,5 @@
 from PyPDF2 import PdfReader, PdfWriter
+from PyPDF2.generic import NameObject, BooleanObject
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, Union
@@ -20,16 +21,26 @@ class PDFWriter:
         Returns:
             BytesIO object containing filled PDF
         """
+        # Reset writer per call to avoid accumulating pages between invocations
+        self.writer = PdfWriter()
         self.reader = PdfReader(str(template_path))
 
         # Copy template pages to writer
         for page in self.reader.pages:
             self.writer.add_page(page)
 
-        # Update form fields
-        self.writer.update_page_form_field_values(
-            self.writer.pages[0], field_data
-        )
+        # Update form fields on ALL pages (some forms distribute fields across pages)
+        for page in self.writer.pages:
+            self.writer.update_page_form_field_values(page, field_data)
+
+        # Hint viewers to regenerate appearances, improving visibility of filled values
+        try:
+            if "/AcroForm" in self.writer._root_object:
+                acro_form = self.writer._root_object[NameObject("/AcroForm")]
+                acro_form[NameObject("/NeedAppearances")] = BooleanObject(True)
+        except Exception:
+            # Best-effort; if setting appearance fails, continue with filled fields
+            pass
 
         # Save to BytesIO
         output = BytesIO()
