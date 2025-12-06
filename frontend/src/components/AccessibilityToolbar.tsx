@@ -82,7 +82,7 @@ export default function AccessibilityToolbar({ variant = "floating", className }
 
   const containerClassName = useMemo(() => {
     const base =
-      "flex items-center divide-x divide-subtle rounded-lg border bg-toolbar text-toolbar backdrop-blur-sm transition-all duration-200";
+      "flex h-10 items-center divide-x divide-subtle rounded-lg border bg-toolbar text-toolbar backdrop-blur-sm transition-all duration-200";
     const position = variant === "inline" ? "relative z-0" : "fixed top-6 right-6 z-50";
     const highlight = contrast !== "normal" || appearance !== "auto" || fontScale !== 0;
     if (highlight) {
@@ -125,7 +125,7 @@ export default function AccessibilityToolbar({ variant = "floating", className }
                   <button
                     key={option.value}
                     type="button"
-                    className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${contrast === option.value ? "bg-surface-subdued text-primary" : "text-secondary hover:bg-(--color-surface-subdued)"}`}
+                    className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 font-medium transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 border border-subtle bg-surface-subdued ${contrast === option.value ? "bg-surface-subdued text-primary" : "text-secondary hover:bg-(--color-surface-subdued)"}`}
                     role="menuitemradio"
                     aria-label={`Ustaw kontrast na ${option.label}`}
                     aria-checked={contrast === option.value}
@@ -287,7 +287,7 @@ function ToolbarButton({ label, ariaLabel, icon, isOpen, isActive, onToggle, dro
     <div className="relative">
       <button
         type="button"
-        className={`flex h-11 w-12 items-center justify-center transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${isOpen ? "bg-surface-subdued" : "bg-transparent"} ${isActive ? "text-(--color-accent-strong)" : "text-toolbar-muted hover:text-foreground"}`}
+        className={`flex h-10 w-12 items-center justify-center transition focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-1 ${isOpen ? "bg-surface-subdued" : "bg-transparent"} ${isActive ? "text-(--color-accent-strong)" : "text-toolbar-muted hover:text-foreground"}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={ariaLabel}

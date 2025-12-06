@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
 import { type IncidentPriority, type IncidentStatus } from '@/types/incident';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 const statusLabels: Record<IncidentStatus, string> = {
   pending: 'Oczekujące',
@@ -85,13 +86,12 @@ export default function EmployeeDashboard() {
       <div className="mx-auto w-full max-w-6xl px-6">
         <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
           <div className="mb-8 flex flex-col gap-4">
-            <button
-              type="button"
-              onClick={() => router.push('/')}
-              className="inline-flex w-fit items-center gap-2 text-sm font-medium text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-            >
-              <span aria-hidden="true">←</span> Powrót do strony głównej
-            </button>
+            <Breadcrumbs
+              items={[
+                { href: '/dashboard/employee', labelKey: 'panel' },
+                { labelKey: 'incident-list' },
+              ]}
+            />
             <div>
               <h1 className="text-3xl font-semibold text-primary">Panel pracownika ZUS</h1>
               <p className="mt-2 text-sm text-muted">

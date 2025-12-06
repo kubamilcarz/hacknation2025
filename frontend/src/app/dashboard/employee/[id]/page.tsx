@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
 import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 const statusLabels: Record<IncidentStatus, string> = {
   pending: 'Oczekujące',
@@ -52,6 +53,20 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
       setError('Nie znaleziono zgłoszenia.');
     }
   }, [incidentFromStore, isLoading, incidents.length]);
+
+  const breadcrumbItems = useMemo(() => {
+    if (incident) {
+      return [
+        { href: '/dashboard/employee', labelKey: 'panel' },
+        { label: `Zgłoszenie ${incident.caseNumber}` },
+      ];
+    }
+
+    return [
+      { href: '/dashboard/employee', labelKey: 'panel' },
+      { labelKey: 'report' },
+    ];
+  }, [incident]);
 
   const handleSave = async () => {
     if (!incident) {
@@ -108,13 +123,7 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
       <div className="mx-auto w-full max-w-4xl px-6">
         <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
           <div className="mb-8 flex flex-col gap-4">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/employee')}
-              className="inline-flex w-fit items-center gap-2 text-sm font-medium text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-            >
-              <span aria-hidden="true">←</span> Powrót do listy zgłoszeń
-            </button>
+            <Breadcrumbs items={breadcrumbItems} />
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold text-primary">
                 {incident ? `Zgłoszenie ${incident.caseNumber}` : 'Zgłoszenie'}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useIncidents } from '@/context/IncidentContext';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { type CreateIncidentInput, type IncidentPriority } from '@/types/incident';
 
 const categories = [
@@ -76,13 +77,12 @@ export default function UserDashboard() {
       <div className="mx-auto w-full max-w-4xl px-6">
         <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
           <div className="mb-10 flex flex-col gap-4">
-            <button
-              type="button"
-              onClick={() => router.push('/')}
-              className="inline-flex w-fit items-center gap-2 text-sm font-medium text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-            >
-              <span aria-hidden="true">←</span> Powrót do strony głównej
-            </button>
+            <Breadcrumbs
+              items={[
+                { href: '/', labelKey: 'home' },
+                { href: '/dashboard/user', labelKey: 'report-incident' },
+              ]}
+            />
             <div>
               <h1 className="text-3xl font-semibold text-primary">Zgłoś zdarzenie</h1>
               <p className="mt-2 text-sm text-muted">
