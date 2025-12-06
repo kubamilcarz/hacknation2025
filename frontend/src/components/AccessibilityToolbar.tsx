@@ -37,7 +37,12 @@ const appearanceOptions: Array<{ label: string; value: AppearanceSetting }> = [
   { label: "Ciemny", value: "dark" },
 ];
 
-export default function AccessibilityToolbar() {
+type AccessibilityToolbarProps = {
+  variant?: "floating" | "inline";
+  className?: string;
+};
+
+export default function AccessibilityToolbar({ variant = "floating", className }: AccessibilityToolbarProps) {
   const [openMenu, setOpenMenu] = useState<DropdownKey | null>(null);
   const { contrast, setContrast, appearance, setAppearance, fontScale, increaseFont, decreaseFont } =
     useAccessibility();
@@ -77,17 +82,19 @@ export default function AccessibilityToolbar() {
 
   const containerClassName = useMemo(() => {
     const base =
-      "fixed top-6 right-6 z-50 flex items-center divide-x divide-subtle rounded-lg border bg-toolbar text-toolbar backdrop-blur-sm transition-all duration-200";
+      "flex items-center divide-x divide-subtle rounded-lg border bg-toolbar text-toolbar backdrop-blur-sm transition-all duration-200";
+    const position = variant === "inline" ? "relative z-0" : "fixed top-6 right-6 z-50";
     const highlight = contrast !== "normal" || appearance !== "auto" || fontScale !== 0;
-    return highlight
-      ? `${base} border-(--color-accent-strong) shadow-toolbar-strong`
-      : `${base} border-toolbar shadow-toolbar`;
-  }, [appearance, contrast, fontScale]);
+    if (highlight) {
+      return `${position} ${base} border-(--color-accent-strong) ${variant === "inline" ? "shadow-none" : "shadow-toolbar-strong"}`;
+    }
+    return `${position} ${base} border-toolbar ${variant === "inline" ? "shadow-none" : "shadow-toolbar"}`;
+  }, [appearance, contrast, fontScale, variant]);
 
   return (
     <div
       ref={toolbarRef}
-      className={containerClassName}
+      className={`${containerClassName} ${className ?? ""}`}
       role="presentation"
     >
       <ToolbarButton
