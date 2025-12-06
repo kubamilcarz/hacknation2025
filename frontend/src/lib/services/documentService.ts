@@ -640,7 +640,15 @@ class MockDocumentApi implements DocumentApi {
     }
   }
 
-  private normalizePositiveInteger(value: number | null | undefined, fallback: number) {
+  private normalizePositiveInteger(value: number | string | null | undefined, fallback: number) {
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isNaN(parsed)) {
+        return Math.max(1, parsed);
+      }
+      return fallback;
+    }
+
     if (typeof value !== "number" || Number.isNaN(value)) {
       return fallback;
     }

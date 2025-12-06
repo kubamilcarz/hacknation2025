@@ -143,6 +143,7 @@ export default function EmployeeDashboard() {
   });
 
   const currentQueryOptionsRef = useRef<DocumentListOptions>({ page: 1, pageSize: PAGE_SIZE });
+  const pendingPageRef = useRef<number | null>(null);
 
   const searchParamsString = searchParams.toString();
   const commitQueryParams = useCallback(
@@ -223,9 +224,16 @@ export default function EmployeeDashboard() {
       machineInvolved: resolvedMachineInvolved,
     };
 
+    pendingPageRef.current = nextOptions.page ?? 1;
     currentQueryOptionsRef.current = nextOptions;
     void loadDocuments(nextOptions);
   }, [currentPageSize, loadDocuments, normalizedRequestedPage, searchParamsString]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      pendingPageRef.current = null;
+    }
+  }, [isLoading]);
 
   const commitSearchTerm = useCallback(
     (value?: string) => {
@@ -247,19 +255,45 @@ export default function EmployeeDashboard() {
   );
 
   useEffect(() => {
-    if (!hasLoaded || isLoading) {
+    if (!hasLoaded) {
       return;
     }
 
-    const desiredValue = currentServicePage <= 1 ? null : String(currentServicePage);
+    const pendingPage = pendingPageRef.current;
+    if (pendingPage != null && pendingPage !== currentServicePage) {
+      return;
+    }
+
+    if (pendingPage != null && pendingPage === currentServicePage) {
+      pendingPageRef.current = null;
+    }
+
+    const hasMultiplePages = totalPages > 1;
+    const desiredValue = currentServicePage > 1 ? String(currentServicePage) : null;
     const currentValue = rawPageParam ?? null;
 
     if (desiredValue === currentValue) {
       return;
     }
 
+    if (desiredValue === null) {
+      if (!hasMultiplePages) {
+        if (currentValue !== null) {
+          commitQueryParams({ page: null });
+        }
+        return;
+      }
+
+      if (currentValue === null || currentValue === '1') {
+        return;
+      }
+
+      commitQueryParams({ page: '1' });
+      return;
+    }
+
     commitQueryParams({ page: desiredValue });
-  }, [commitQueryParams, currentServicePage, hasLoaded, isLoading, rawPageParam]);
+  }, [commitQueryParams, currentServicePage, hasLoaded, rawPageParam, totalPages]);
 
   const handlePageChange = useCallback(
     (page: number) => {
