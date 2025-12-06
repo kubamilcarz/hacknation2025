@@ -2,6 +2,7 @@ import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
 import { Spinner } from '@/components/Spinner';
 import { useIncidentReport } from '@/context/IncidentReportContext';
+import { formatFileSize } from '@/lib/utils/formatFileSize';
 
 export function ReviewStepSection() {
   const {
@@ -10,6 +11,7 @@ export function ReviewStepSection() {
     submittedDocumentId,
     downloadState,
     handleDownload,
+    witnessStatements,
   } = useIncidentReport();
 
   const canDownload = submittedDocumentId != null;
@@ -23,12 +25,28 @@ export function ReviewStepSection() {
     >
       {hasSubmittedSuccessfully ? (
         <div className="space-y-4">
-          <IncidentAiSuggestion title="Zgłoszenie wysłane">
-            Zgłoszenie nr <strong>{submittedDocumentId ?? 'w przygotowaniu'}</strong> zostało wysłane. Skontaktujemy się, gdy tylko rozpoczniemy weryfikację. Jeśli zauważysz potrzebę korekty, przygotuj notatkę i poinformuj nas w odpowiedzi na wiadomość.
+          <IncidentAiSuggestion title="Formularz gotowy do pobrania">
+            Twoje zgłoszenie zostało przygotowane w formie pliku. Pobierz dokument i samodzielnie przekaż go do ZUS — system nie wysyła formularza w Twoim imieniu. W razie potrzeby wróć do wcześniejszych kroków, popraw treść i przygotuj nową wersję.
           </IncidentAiSuggestion>
+          {witnessStatements.length > 0 && (
+            <div className="rounded-xl border border-subtle bg-surface p-4">
+              <p className="text-sm font-semibold text-primary">Załączone oświadczenia świadków</p>
+              <ul className="mt-2 space-y-2 text-sm text-secondary">
+                {witnessStatements.map((statement) => (
+                  <li key={statement.id} className="rounded-lg border border-dashed border-subtle px-3 py-2">
+                    <p className="font-medium text-primary">{statement.name}</p>
+                    <p className="text-xs text-muted">{formatFileSize(statement.size)}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-muted">
+                Zapisz te pliki razem z formularzem — będziesz je dołączać przy przekazywaniu dokumentów do ZUS.
+              </p>
+            </div>
+          )}
           <div className="rounded-xl border border-dashed border-subtle bg-surface p-4">
             <p className="text-sm text-muted">
-              Zapisz potwierdzenie w preferowanym formacie. Przyda się jako kompletna dokumentacja sprawy oraz podczas kontaktu z urzędami, lekarzem prowadzącym lub partnerami biznesowymi.
+              Zapisz potwierdzenie w preferowanym formacie. Dokument przyda się jako kompletna dokumentacja sprawy i dołączysz go podczas składania zgłoszenia w ZUS.
             </p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <button
@@ -54,8 +72,24 @@ export function ReviewStepSection() {
         </div>
       ) : (
         <IncidentAiSuggestion>
-          Przejrzyj dane i upewnij się, że opisujesz zdarzenie tak, jak chcesz. Każdy krok możesz jeszcze skorygować, ale jeśli chcesz wysłać zgłoszenie już teraz, śmiało.
+          Przejrzyj dane i upewnij się, że opisujesz zdarzenie tak, jak chcesz. Gdy będziesz gotowy, kliknij „Przygotuj formularz”, a otrzymasz pliki do pobrania i samodzielnego złożenia w ZUS.
         </IncidentAiSuggestion>
+      )}
+      {witnessStatements.length > 0 && !hasSubmittedSuccessfully && (
+        <div className="mt-4 rounded-xl border border-subtle bg-surface px-4 py-3">
+          <p className="text-sm font-semibold text-primary">Załączone oświadczenia świadków</p>
+          <ul className="mt-2 space-y-2 text-sm text-secondary">
+            {witnessStatements.map((statement) => (
+              <li key={statement.id} className="rounded-lg border border-dashed border-subtle px-3 py-2">
+                <p className="font-medium text-primary">{statement.name}</p>
+                <p className="text-xs text-muted">{formatFileSize(statement.size)}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">
+            Po przygotowaniu formularza pobierz go wraz z tymi plikami i prześlij wszystko do ZUS.
+          </p>
+        </div>
       )}
       {submitError && (
         <IncidentAiSuggestion title="Komunikat systemowy" variant="warning">

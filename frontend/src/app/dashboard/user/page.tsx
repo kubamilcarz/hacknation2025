@@ -28,8 +28,8 @@ function UserDashboardContent() {
 
   const nextLabel = currentStepIndex === steps.length - 1
     ? hasSubmittedSuccessfully
-      ? 'Wysłano'
-      : 'Wyślij zgłoszenie'
+      ? 'Gotowe'
+      : 'Przygotuj formularz'
     : 'Dalej';
 
   return (

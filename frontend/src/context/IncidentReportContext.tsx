@@ -38,7 +38,7 @@ const STEPS: IncidentWizardStep[] = [
   {
     id: 'review',
     title: 'Podsumowanie',
-    description: 'Rzuć okiem na całość przed wysłaniem.',
+    description: 'Rzuć okiem na całość przed przygotowaniem formularza.',
   },
 ];
 
@@ -159,6 +159,14 @@ type InputChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEv
 type TextareaChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEvent<HTMLTextAreaElement>) => void;
 type WitnessInputChangeHandler = (index: number, field: WitnessEditableField) => (event: ChangeEvent<HTMLInputElement>) => void;
 
+type WitnessStatementAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  file: File;
+  uploadedAt: number;
+};
+
 type IncidentReportContextValue = {
   steps: IncidentWizardStep[];
   currentStep: IncidentWizardStep;
@@ -172,6 +180,7 @@ type IncidentReportContextValue = {
   activeWitnessIndex: number | null;
   downloadState: 'idle' | 'docx' | 'pdf';
   witnesses: CreateDocumentInput['witnesses'];
+  witnessStatements: WitnessStatementAttachment[];
   isSubmitting: boolean;
   hasSubmittedSuccessfully: boolean;
   hasNextStep: boolean;
@@ -186,6 +195,8 @@ type IncidentReportContextValue = {
   handleRemoveWitness: (index: number) => void;
   handleToggleWitnessEdit: (index: number) => void;
   handleWitnessInputChange: WitnessInputChangeHandler;
+  handleWitnessStatementUpload: (files: FileList | File[] | null) => void;
+  handleWitnessStatementRemove: (id: string) => void;
   handleDownload: (format: 'docx' | 'pdf') => Promise<void>;
 };
 
@@ -213,6 +224,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<'idle' | 'docx' | 'pdf'>('idle');
+  const [witnessStatements, setWitnessStatements] = useState<WitnessStatementAttachment[]>([]);
 
   const currentStep = STEPS[currentStepIndex] ?? STEPS[0];
   const witnesses = incidentDraft.witnesses ?? [];
@@ -360,6 +372,10 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
       witnesses: nextWitnesses,
     }));
 
+    if (nextWitnesses.length === 0) {
+      setWitnessStatements([]);
+    }
+
     setActiveWitnessIndex((current) => {
       if (current == null) {
         return current;
@@ -421,6 +437,36 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     setActiveWitnessIndex((current) => (current === index ? null : index));
   }, []);
 
+  const handleWitnessStatementUpload = useCallback((incoming: FileList | File[] | null) => {
+    if (!incoming) {
+      return;
+    }
+
+    const files = Array.isArray(incoming) ? incoming : Array.from(incoming);
+    if (files.length === 0) {
+      return;
+    }
+
+    setWitnessStatements((prev) => {
+      const next = [...prev];
+      files.forEach((file) => {
+        const attachment: WitnessStatementAttachment = {
+          id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+          name: file.name,
+          size: file.size,
+          file,
+          uploadedAt: Date.now(),
+        };
+        next.push(attachment);
+      });
+      return next;
+    });
+  }, []);
+
+  const handleWitnessStatementRemove = useCallback((id: string) => {
+    setWitnessStatements((prev) => prev.filter((attachment) => attachment.id !== id));
+  }, []);
+
   const handleValidationGate = useCallback(() => {
     if (letUserProceedWithEmptyFields) {
       return true;
@@ -466,13 +512,13 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error(error);
       setSubmitState('error');
-      setSubmitError('Nie udało się wysłać zgłoszenia. Spróbuj ponownie.');
+      setSubmitError('Nie udało się przygotować formularza. Spróbuj ponownie.');
     }
   }, [createDocument, incidentDraft, submitState]);
 
   const handleDownload = useCallback(async (format: 'docx' | 'pdf') => {
     if (submittedDocumentId == null) {
-      setSubmitError('Brakuje numeru zgłoszenia. Wyślij dokument ponownie.');
+      setSubmitError('Najpierw przygotuj formularz, a potem spróbuj pobrania ponownie.');
       return;
     }
 
@@ -547,6 +593,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     activeWitnessIndex,
     downloadState,
     witnesses,
+    witnessStatements,
     isSubmitting,
     hasSubmittedSuccessfully,
     hasNextStep,
@@ -561,6 +608,8 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     handleRemoveWitness,
     handleToggleWitnessEdit,
     handleWitnessInputChange,
+    handleWitnessStatementUpload,
+    handleWitnessStatementRemove,
     handleDownload,
   };
 
