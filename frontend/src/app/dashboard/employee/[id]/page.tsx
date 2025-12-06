@@ -1,271 +1,293 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { mockIncidents } from '@/lib/mock-data';
-import { Incident, IncidentStatus } from '@/types/incident';
+import { useIncidents } from '@/context/IncidentContext';
+import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
 
-export default function IncidentDetail({ params }: { params: { id: string } }) {
+const statusLabels: Record<IncidentStatus, string> = {
+  pending: 'Oczekujące',
+  'in-progress': 'W trakcie',
+  resolved: 'Rozwiązane',
+  rejected: 'Odrzucone',
+};
+
+const priorityLabels: Record<IncidentPriority, string> = {
+  low: 'Niski',
+  medium: 'Średni',
+  high: 'Wysoki',
+  critical: 'Krytyczny',
+};
+
+interface IncidentDetailPageProps {
+  params: { id: string };
+}
+
+export default function IncidentDetail({ params }: IncidentDetailPageProps) {
   const router = useRouter();
-  const [incident, setIncident] = useState<Incident | null>(null);
+  const { incidents, isLoading, updateIncident, getIncidentById } = useIncidents();
+
+  const incidentFromStore = useMemo(() => getIncidentById(params.id), [getIncidentById, params.id, incidents]);
+
+  const [incident, setIncident] = useState<Incident | null>(incidentFromStore ?? null);
   const [status, setStatus] = useState<IncidentStatus>('pending');
   const [assignedTo, setAssignedTo] = useState('');
   const [notes, setNotes] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const foundIncident = mockIncidents.find(inc => inc.id === params.id);
-    if (foundIncident) {
-      setIncident(foundIncident);
-      setStatus(foundIncident.status);
-      setAssignedTo(foundIncident.assignedTo || '');
-      setNotes(foundIncident.notes || '');
+    if (incidentFromStore) {
+      setIncident(incidentFromStore);
+      setStatus(incidentFromStore.status);
+      setAssignedTo(incidentFromStore.assignedTo ?? '');
+      setNotes(incidentFromStore.notes ?? '');
+      setError(null);
     }
-  }, [params.id]);
+  }, [incidentFromStore]);
 
-  const handleSave = () => {
-    // In a real app, this would update via API
-    console.log('Saving changes:', { status, assignedTo, notes });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    if (!incidentFromStore && !isLoading && incidents.length > 0) {
+      setError('Nie znaleziono zgłoszenia.');
+    }
+  }, [incidentFromStore, isLoading, incidents.length]);
+
+  const handleSave = async () => {
+    if (!incident) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateIncident(incident.id, { status, assignedTo, notes });
+      setIncident(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nie udało się zapisać zmian.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!incident) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <p className="text-gray-600">Ładowanie...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const getStatusBadge = (status: IncidentStatus) => {
-    const styles = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      'in-progress': 'bg-blue-100 text-blue-800',
-      resolved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
+  const getStatusBadge = (value: IncidentStatus) => {
+    const base = 'inline-flex items-center rounded-full px-3 py-1 text-sm font-medium';
+    const palette: Record<IncidentStatus, string> = {
+      pending: 'bg-amber-100 text-amber-900',
+      'in-progress': 'bg-blue-100 text-blue-900',
+      resolved: 'bg-emerald-100 text-emerald-900',
+      rejected: 'bg-rose-100 text-rose-900',
     };
-
-    const labels = {
-      pending: 'Oczekujące',
-      'in-progress': 'W trakcie',
-      resolved: 'Rozwiązane',
-      rejected: 'Odrzucone',
-    };
-
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[status]}`}>
-        {labels[status]}
-      </span>
-    );
+    return <span className={`${base} ${palette[value]}`}>{statusLabels[value]}</span>;
   };
 
-  const getPriorityBadge = (priority: string) => {
-    const styles = {
-      low: 'bg-gray-100 text-gray-800',
-      medium: 'bg-blue-100 text-blue-800',
-      high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800',
+  const getPriorityBadge = (value: IncidentPriority) => {
+    const base = 'inline-flex items-center rounded-full px-3 py-1 text-sm font-medium';
+    const palette: Record<IncidentPriority, string> = {
+      low: 'bg-slate-100 text-slate-800',
+      medium: 'bg-blue-100 text-blue-900',
+      high: 'bg-orange-100 text-orange-900',
+      critical: 'bg-red-100 text-red-900',
     };
-
-    const labels = {
-      low: 'Niski',
-      medium: 'Średni',
-      high: 'Wysoki',
-      critical: 'Krytyczny',
-    };
-
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[priority as keyof typeof styles]}`}>
-        {labels[priority as keyof typeof labels]}
-      </span>
-    );
+    return <span className={`${base} ${palette[value]}`}>{priorityLabels[value]}</span>;
   };
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('pl-PL', {
+  const formatDate = (input: Date) =>
+    new Date(input).toLocaleDateString('pl-PL', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     });
-  };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="mb-8">
+    <div className="min-h-screen bg-app py-8">
+      <div className="mx-auto w-full max-w-4xl px-6">
+        <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
+          <div className="mb-8 flex flex-col gap-4">
             <button
+              type="button"
               onClick={() => router.push('/dashboard/employee')}
-              className="text-blue-600 hover:text-blue-800 mb-4"
+              className="inline-flex w-fit items-center gap-2 text-sm font-medium text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
             >
-              ← Powrót do listy zgłoszeń
+              <span aria-hidden="true">←</span> Powrót do listy zgłoszeń
             </button>
-            <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold text-gray-900">Zgłoszenie #{incident.id}</h1>
-              {getStatusBadge(incident.status)}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="text-3xl font-semibold text-primary">
+                {incident ? `Zgłoszenie #${incident.id}` : 'Zgłoszenie'}
+              </h1>
+              {incident && getStatusBadge(incident.status)}
             </div>
           </div>
 
           {saved && (
-            <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-              Zmiany zostały zapisane pomyślnie.
+            <div className="mb-6 rounded-lg border border-(--color-accent-strong) bg-(--color-accent-soft) px-4 py-3 text-sm text-accent">
+              Zapisano zmiany.
             </div>
           )}
 
-          <div className="space-y-6">
-            {/* Basic Info */}
-            <div className="border-b pb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Informacje podstawowe</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Tytuł</p>
-                  <p className="text-lg font-medium text-gray-900">{incident.title}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Kategoria</p>
-                  <p className="text-lg font-medium text-gray-900">{incident.category}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Priorytet</p>
-                  <div className="mt-1">{getPriorityBadge(incident.priority)}</div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Data utworzenia</p>
-                  <p className="text-lg font-medium text-gray-900">{formatDate(incident.createdAt)}</p>
-                </div>
-              </div>
+          {error && (
+            <div className="mb-6 rounded-lg border border-error bg-error-soft px-4 py-3 text-sm text-error">
+              {error}
             </div>
+          )}
 
-            {/* Description */}
-            <div className="border-b pb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Opis problemu</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">{incident.description}</p>
+          {(!incident && isLoading) && (
+            <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-6 text-sm text-muted">
+              Ładowanie szczegółów zgłoszenia…
             </div>
+          )}
 
-            {/* Reporter Info */}
-            <div className="border-b pb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Dane zgłaszającego</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Imię i nazwisko</p>
-                  <p className="text-lg font-medium text-gray-900">{incident.reporterName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Email</p>
-                  <p className="text-lg font-medium text-gray-900">{incident.reporterEmail}</p>
-                </div>
-                {incident.reporterPhone && (
+          {incident && (
+            <div className="space-y-8">
+              <section className="border-b border-subtle pb-6">
+                <h2 className="text-lg font-semibold text-primary">Informacje podstawowe</h2>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <p className="text-sm text-gray-600">Telefon</p>
-                    <p className="text-lg font-medium text-gray-900">{incident.reporterPhone}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Tytuł</p>
+                    <p className="mt-1 text-base font-medium text-primary">{incident.title}</p>
                   </div>
-                )}
-                {incident.pesel && (
                   <div>
-                    <p className="text-sm text-gray-600">PESEL</p>
-                    <p className="text-lg font-medium text-gray-900">{incident.pesel}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Kategoria</p>
+                    <p className="mt-1 text-base font-medium text-primary">{incident.category}</p>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Management Section */}
-            <div className="border-b pb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Zarządzanie sprawą</h2>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
-                    Status sprawy
-                  </label>
-                  <select
-                    id="status"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as IncidentStatus)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="pending">Oczekujące</option>
-                    <option value="in-progress">W trakcie</option>
-                    <option value="resolved">Rozwiązane</option>
-                    <option value="rejected">Odrzucone</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-700 mb-2">
-                    Przypisane do
-                  </label>
-                  <input
-                    type="text"
-                    id="assignedTo"
-                    value={assignedTo}
-                    onChange={(e) => setAssignedTo(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Imię i nazwisko pracownika"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                    Notatki wewnętrzne
-                  </label>
-                  <textarea
-                    id="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={6}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Dodaj notatki dotyczące obsługi sprawy..."
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Timeline */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Historia</h2>
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3">
-                  <div className="shrink-0 w-2 h-2 mt-2 bg-blue-500 rounded-full"></div>
                   <div>
-                    <p className="text-sm text-gray-900">Zgłoszenie utworzone</p>
-                    <p className="text-xs text-gray-500">{formatDate(incident.createdAt)}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Priorytet</p>
+                    <div className="mt-2">{getPriorityBadge(incident.priority)}</div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Data utworzenia</p>
+                    <p className="mt-1 text-base font-medium text-primary">{formatDate(incident.createdAt)}</p>
                   </div>
                 </div>
-                {incident.updatedAt.getTime() !== incident.createdAt.getTime() && (
-                  <div className="flex items-start space-x-3">
-                    <div className="shrink-0 w-2 h-2 mt-2 bg-blue-500 rounded-full"></div>
+              </section>
+
+              <section className="border-b border-subtle pb-6">
+                <h2 className="text-lg font-semibold text-primary">Opis zdarzenia</h2>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-secondary">
+                  {incident.description}
+                </p>
+              </section>
+
+              <section className="border-b border-subtle pb-6">
+                <h2 className="text-lg font-semibold text-primary">Dane zgłaszającego</h2>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Imię i nazwisko</p>
+                    <p className="mt-1 text-base font-medium text-primary">{incident.reporterName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Email</p>
+                    <p className="mt-1 text-base font-medium text-primary">{incident.reporterEmail}</p>
+                  </div>
+                  {incident.reporterPhone && (
                     <div>
-                      <p className="text-sm text-gray-900">Ostatnia aktualizacja</p>
-                      <p className="text-xs text-gray-500">{formatDate(incident.updatedAt)}</p>
+                      <p className="text-xs uppercase tracking-wide text-muted">Telefon</p>
+                      <p className="mt-1 text-base font-medium text-primary">{incident.reporterPhone}</p>
+                    </div>
+                  )}
+                  {incident.pesel && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted">PESEL</p>
+                      <p className="mt-1 text-base font-medium text-primary">{incident.pesel}</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="border-b border-subtle pb-6">
+                <h2 className="text-lg font-semibold text-primary">Obsługa sprawy</h2>
+                <div className="mt-4 grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label htmlFor="status" className="text-sm font-medium text-secondary">
+                      Status sprawy
+                    </label>
+                    <select
+                      id="status"
+                      value={status}
+                      onChange={(event) => setStatus(event.target.value as IncidentStatus)}
+                      className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                    >
+                      <option value="pending">Oczekujące</option>
+                      <option value="in-progress">W trakcie</option>
+                      <option value="resolved">Rozwiązane</option>
+                      <option value="rejected">Odrzucone</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="assignedTo" className="text-sm font-medium text-secondary">
+                      Przypisane do
+                    </label>
+                    <input
+                      id="assignedTo"
+                      value={assignedTo}
+                      onChange={(event) => setAssignedTo(event.target.value)}
+                      placeholder="Imię i nazwisko pracownika"
+                      className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="notes" className="text-sm font-medium text-secondary">
+                      Notatki wewnętrzne
+                    </label>
+                    <textarea
+                      id="notes"
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      rows={6}
+                      className="w-full rounded-md border border-subtle bg-input px-4 py-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                      placeholder="Dodaj ważne ustalenia, np. oczekiwane dokumenty lub kontakt telefoniczny."
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="border-b border-subtle pb-6">
+                <h2 className="text-lg font-semibold text-primary">Historia zmian</h2>
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 h-2 w-2 rounded-full bg-(--color-accent)"></span>
+                    <div>
+                      <p className="text-sm font-medium text-primary">Zgłoszenie utworzone</p>
+                      <p className="text-xs text-muted">{formatDate(incident.createdAt)}</p>
                     </div>
                   </div>
-                )}
+                  {incident.updatedAt.getTime() !== incident.createdAt.getTime() && (
+                    <div className="flex items-start gap-3">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-(--color-accent)"></span>
+                      <div>
+                        <p className="text-sm font-medium text-primary">Ostatnia aktualizacja</p>
+                        <p className="text-xs text-muted">{formatDate(incident.updatedAt)}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard/employee')}
+                  className="order-2 inline-flex items-center justify-center rounded-md border border-subtle bg-surface px-5 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 sm:order-1"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="order-1 inline-flex items-center justify-center rounded-md bg-(--color-accent) px-6 py-2 text-sm font-semibold text-(--color-accent-text) transition hover:bg-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 sm:order-2"
+                >
+                  {saving ? 'Zapisywanie…' : 'Zapisz zmiany'}
+                </button>
               </div>
             </div>
-
-            {/* Actions */}
-            <div className="flex justify-end space-x-4 pt-6">
-              <button
-                onClick={() => router.push('/dashboard/employee')}
-                className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSave}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Zapisz zmiany
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

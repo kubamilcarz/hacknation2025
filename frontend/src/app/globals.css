@@ -21,6 +21,9 @@
     --color-toolbar-border: rgba(148, 163, 184, 0.45);
     --color-toolbar-foreground: #0f172a;
     --color-toolbar-muted: #475569;
+    --color-input: #ffffff;
+    --color-error: #dc2626;
+    --color-error-soft: rgba(220, 38, 38, 0.12);
     --shadow-card: 0 24px 60px -32px rgba(15, 23, 42, 0.25);
     --shadow-popover: 0 22px 45px -30px rgba(15, 23, 42, 0.35);
     --shadow-toolbar: 0 18px 48px -32px rgba(15, 23, 42, 0.32);
@@ -62,6 +65,10 @@
     background-color: var(--color-background);
   }
 
+  .bg-app {
+    background-color: var(--color-background);
+  }
+
   .bg-surface {
     background-color: var(--color-surface);
   }
@@ -72,6 +79,10 @@
 
   .bg-surface-elevated {
     background-color: var(--color-surface-elevated);
+  }
+
+  .bg-input {
+    background-color: var(--color-input);
   }
 
   .bg-accent-soft {
@@ -106,6 +117,10 @@
     color: var(--color-toolbar-muted);
   }
 
+  .text-error {
+    color: var(--color-error);
+  }
+
   .border-subtle {
     border-color: var(--color-border);
   }
@@ -116,6 +131,10 @@
 
   .border-toolbar {
     border-color: var(--color-toolbar-border);
+  }
+
+  .border-error {
+    border-color: var(--color-error);
   }
 
   .shadow-card {
@@ -132,6 +151,10 @@
 
   .shadow-toolbar-strong {
     box-shadow: var(--shadow-toolbar-strong);
+  }
+
+  .bg-error-soft {
+    background-color: var(--color-error-soft);
   }
 
   .ring-focus {

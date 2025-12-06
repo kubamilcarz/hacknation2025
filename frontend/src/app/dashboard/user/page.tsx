@@ -2,224 +2,286 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useIncidents } from '@/context/IncidentContext';
+import { type CreateIncidentInput, type IncidentPriority } from '@/types/incident';
+
+const categories = [
+  'Zasiłki',
+  'Emerytury',
+  'Składki',
+  'Dokumentacja',
+  'Techniczne',
+  'Inne',
+];
+
+const priorities: { value: IncidentPriority; label: string }[] = [
+  { value: 'low', label: 'Niski' },
+  { value: 'medium', label: 'Średni' },
+  { value: 'high', label: 'Wysoki' },
+  { value: 'critical', label: 'Krytyczny' },
+];
+
+type IncidentFormState = CreateIncidentInput;
+
+const initialFormState: IncidentFormState = {
+  title: '',
+  description: '',
+  category: categories[0],
+  priority: 'medium',
+  reporterName: '',
+  reporterEmail: '',
+  reporterPhone: '',
+  pesel: '',
+};
 
 export default function UserDashboard() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: 'Zasiłki',
-    priority: 'medium',
-    reporterName: '',
-    reporterEmail: '',
-    reporterPhone: '',
-    pesel: '',
-  });
-  const [submitted, setSubmitted] = useState(false);
+  const { createIncident } = useIncidents();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // In a real app, this would send to an API
-    console.log('Submitting incident:', formData);
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setFormData({
-        title: '',
-        description: '',
-        category: 'Zasiłki',
-        priority: 'medium',
-        reporterName: '',
-        reporterEmail: '',
-        reporterPhone: '',
-        pesel: '',
-      });
-    }, 2000);
+  const [formData, setFormData] = useState<IncidentFormState>(initialFormState);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [caseId, setCaseId] = useState<string | null>(null);
+
+  const handleChange = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
+    const { name, value } = event.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setSubmissionError(null);
+
+    try {
+      const created = await createIncident(formData);
+      setCaseId(created.id);
+      setFormData(initialFormState);
+    } catch (err) {
+      setSubmissionError(
+        err instanceof Error ? err.message : 'Nie udało się wysłać zgłoszenia. Spróbuj ponownie.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-3xl mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="mb-8">
+    <div className="min-h-screen bg-app py-8">
+      <div className="mx-auto w-full max-w-4xl px-6">
+        <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
+          <div className="mb-10 flex flex-col gap-4">
             <button
+              type="button"
               onClick={() => router.push('/')}
-              className="text-blue-600 hover:text-blue-800 mb-4"
+              className="inline-flex w-fit items-center gap-2 text-sm font-medium text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
             >
-              ← Powrót do strony głównej
+              <span aria-hidden="true">←</span> Powrót do strony głównej
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Zgłoś Zdarzenie</h1>
-            <p className="text-gray-600 mt-2">Zakład Ubezpieczeń Społecznych - Panel Obywatela</p>
+            <div>
+              <h1 className="text-3xl font-semibold text-primary">Zgłoś zdarzenie</h1>
+              <p className="mt-2 text-sm text-muted">
+                Przekaż nam szczegóły wypadku przy pracy. Twoje zgłoszenie zostanie zapisane i przekazane do zespołu
+                ZUS. Na razie korzystamy z danych testowych – po wdrożeniu połączymy formularz z zapleczem ZUS.
+              </p>
+            </div>
           </div>
 
-          {submitted && (
-            <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-              Zgłoszenie zostało pomyślnie wysłane. Numer sprawy zostanie wysłany na podany adres email.
+          {caseId && (
+            <div className="mb-6 rounded-lg border border-(--color-accent-strong) bg-(--color-accent-soft) px-4 py-3 text-sm text-accent">
+              Zgłoszenie przyjęte. Tymczasowy numer sprawy: <span className="font-semibold">{caseId}</span>. Kopię wyślemy na
+              adres e-mail po podłączeniu systemu produkcyjnego.
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                Tytuł zgłoszenia *
-              </label>
-              <input
-                type="text"
-                id="title"
-                name="title"
-                required
-                value={formData.title}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Krótki opis problemu"
-              />
+          {submissionError && (
+            <div className="mb-6 rounded-lg border border-error bg-error-soft px-4 py-3 text-sm text-error">
+              {submissionError}
             </div>
+          )}
 
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Szczegółowy opis *
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                required
-                value={formData.description}
-                onChange={handleChange}
-                rows={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Opisz dokładnie problem, z którym się spotkałeś..."
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-                  Kategoria *
-                </label>
-                <select
-                  id="category"
-                  name="category"
-                  required
-                  value={formData.category}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Zasiłki">Zasiłki</option>
-                  <option value="Emerytury">Emerytury</option>
-                  <option value="Składki">Składki</option>
-                  <option value="Dokumentacja">Dokumentacja</option>
-                  <option value="Techniczne">Problemy techniczne</option>
-                  <option value="Inne">Inne</option>
-                </select>
+          <form className="space-y-8" onSubmit={handleSubmit}>
+            <section className="space-y-6">
+              <div className="space-y-2">
+                <h2 className="text-lg font-semibold text-primary">Opis zdarzenia</h2>
+                <p className="text-sm text-muted">
+                  Opisz wypadek własnymi słowami. System podpowie zespołowi ZUS, jakie dokumenty należy sprawdzić.
+                </p>
               </div>
 
-              <div>
-                <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-2">
-                  Priorytet *
-                </label>
-                <select
-                  id="priority"
-                  name="priority"
-                  required
-                  value={formData.priority}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="low">Niski</option>
-                  <option value="medium">Średni</option>
-                  <option value="high">Wysoki</option>
-                  <option value="critical">Krytyczny</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="border-t pt-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Dane kontaktowe</h2>
-              
               <div className="space-y-4">
-                <div>
-                  <label htmlFor="reporterName" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-2">
+                  <label htmlFor="title" className="text-sm font-medium text-secondary">
+                    Tytuł zgłoszenia *
+                  </label>
+                  <input
+                    id="title"
+                    name="title"
+                    required
+                    value={formData.title}
+                    onChange={handleChange}
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                    placeholder="Krótki tytuł, np. 'Upadek z rusztowania'"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="description" className="text-sm font-medium text-secondary">
+                    Szczegółowy opis *
+                  </label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    required
+                    rows={6}
+                    value={formData.description}
+                    onChange={handleChange}
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-3 text-sm text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                    placeholder="Opisz dokładnie okoliczności wypadku, podaj miejsce, datę oraz osoby, które były świadkami."
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-6">
+              <div className="space-y-2">
+                <h2 className="text-lg font-semibold text-primary">Klasyfikacja sprawy</h2>
+                <p className="text-sm text-muted">
+                  Te informacje pomagają pracownikom ZUS dobrać właściwą procedurę i priorytet obsługi.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="category" className="text-sm font-medium text-secondary">
+                    Kategoria *
+                  </label>
+                  <select
+                    id="category"
+                    name="category"
+                    required
+                    value={formData.category}
+                    onChange={handleChange}
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                  >
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="priority" className="text-sm font-medium text-secondary">
+                    Priorytet *
+                  </label>
+                  <select
+                    id="priority"
+                    name="priority"
+                    required
+                    value={formData.priority}
+                    onChange={handleChange}
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                  >
+                    {priorities.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-6">
+              <div className="space-y-2">
+                <h2 className="text-lg font-semibold text-primary">Dane kontaktowe</h2>
+                <p className="text-sm text-muted">
+                  Dzięki tym danym będziemy mogli skontaktować się w sprawie dodatkowych dokumentów lub decyzji.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="reporterName" className="text-sm font-medium text-secondary">
                     Imię i nazwisko *
                   </label>
                   <input
-                    type="text"
                     id="reporterName"
                     name="reporterName"
                     required
                     value={formData.reporterName}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="reporterEmail" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-2">
+                  <label htmlFor="reporterEmail" className="text-sm font-medium text-secondary">
                     Email *
                   </label>
                   <input
-                    type="email"
                     id="reporterEmail"
                     name="reporterEmail"
+                    type="email"
                     required
                     value={formData.reporterEmail}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="reporterPhone" className="block text-sm font-medium text-gray-700 mb-2">
-                    Telefon
+                <div className="space-y-2">
+                  <label htmlFor="reporterPhone" className="text-sm font-medium text-secondary">
+                    Telefon kontaktowy
                   </label>
                   <input
-                    type="tel"
                     id="reporterPhone"
                     name="reporterPhone"
                     value={formData.reporterPhone}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="+48 123 456 789"
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="pesel" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-2">
+                  <label htmlFor="pesel" className="text-sm font-medium text-secondary">
                     PESEL
                   </label>
                   <input
-                    type="text"
                     id="pesel"
                     name="pesel"
                     value={formData.pesel}
-                    onChange={handleChange}
                     maxLength={11}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={handleChange}
                     placeholder="12345678901"
+                    className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                   />
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="flex justify-end space-x-4 pt-6">
+            <div className="flex flex-col gap-3 border-t border-subtle pt-6 sm:flex-row sm:items-center sm:justify-end">
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="order-2 inline-flex items-center justify-center rounded-md border border-subtle bg-surface px-5 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 sm:order-1"
               >
                 Anuluj
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={isSubmitting}
+                className="order-1 inline-flex items-center justify-center rounded-md bg-(--color-accent) px-6 py-2 text-sm font-semibold text-(--color-accent-text) transition hover:bg-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 sm:order-2"
               >
-                Wyślij zgłoszenie
+                {isSubmitting ? 'Wysyłanie…' : 'Wyślij zgłoszenie'}
               </button>
             </div>
           </form>

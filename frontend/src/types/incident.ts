@@ -18,3 +18,16 @@ export interface Incident {
   assignedTo?: string;
   notes?: string;
 }
+
+export interface CreateIncidentInput {
+  title: string;
+  description: string;
+  category: string;
+  priority: IncidentPriority;
+  reporterName: string;
+  reporterEmail: string;
+  reporterPhone?: string;
+  pesel?: string;
+}
+
+export type UpdateIncidentInput = Partial<Pick<Incident, "status" | "assignedTo" | "notes">>;

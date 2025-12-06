@@ -1,108 +1,126 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { mockIncidents } from '@/lib/mock-data';
-import { Incident, IncidentStatus } from '@/types/incident';
+import { useIncidents } from '@/context/IncidentContext';
+import { type IncidentPriority, type IncidentStatus } from '@/types/incident';
+
+const statusLabels: Record<IncidentStatus, string> = {
+  pending: 'Oczekujące',
+  'in-progress': 'W trakcie',
+  resolved: 'Rozwiązane',
+  rejected: 'Odrzucone',
+};
+
+const priorityLabels: Record<IncidentPriority, string> = {
+  low: 'Niski',
+  medium: 'Średni',
+  high: 'Wysoki',
+  critical: 'Krytyczny',
+};
 
 export default function EmployeeDashboard() {
   const router = useRouter();
-  const [incidents] = useState<Incident[]>(mockIncidents);
+  const { incidents, isLoading } = useIncidents();
   const [filterStatus, setFilterStatus] = useState<IncidentStatus | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredIncidents = incidents.filter(incident => {
-    const matchesStatus = filterStatus === 'all' || incident.status === filterStatus;
-    const matchesSearch = incident.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          incident.reporterName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          incident.id.includes(searchTerm);
-    return matchesStatus && matchesSearch;
-  });
+  const filteredIncidents = useMemo(() => {
+    return incidents.filter((incident) => {
+      const matchesStatus = filterStatus === 'all' || incident.status === filterStatus;
+      const query = searchTerm.trim().toLowerCase();
+      if (!query) {
+        return matchesStatus;
+      }
+
+      const searchable = [
+        incident.id,
+        incident.title,
+        incident.reporterName,
+        incident.reporterEmail,
+        incident.category,
+      ]
+        .filter(Boolean)
+        .map((value) => value.toString().toLowerCase());
+
+      const matchesQuery = searchable.some((value) => value.includes(query));
+      return matchesStatus && matchesQuery;
+    });
+  }, [incidents, filterStatus, searchTerm]);
 
   const getStatusBadge = (status: IncidentStatus) => {
-    const styles = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      'in-progress': 'bg-blue-100 text-blue-800',
-      resolved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
+    const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium';
+    const styles: Record<IncidentStatus, string> = {
+      pending: 'bg-amber-100 text-amber-900',
+      'in-progress': 'bg-blue-100 text-blue-900',
+      resolved: 'bg-emerald-100 text-emerald-900',
+      rejected: 'bg-rose-100 text-rose-900',
     };
 
-    const labels = {
-      pending: 'Oczekujące',
-      'in-progress': 'W trakcie',
-      resolved: 'Rozwiązane',
-      rejected: 'Odrzucone',
-    };
-
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
-        {labels[status]}
-      </span>
-    );
+    return <span className={`${base} ${styles[status]}`}>{statusLabels[status]}</span>;
   };
 
-  const getPriorityBadge = (priority: string) => {
-    const styles = {
-      low: 'bg-gray-100 text-gray-800',
-      medium: 'bg-blue-100 text-blue-800',
-      high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800',
+  const getPriorityBadge = (priority: IncidentPriority) => {
+    const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium';
+    const styles: Record<IncidentPriority, string> = {
+      low: 'bg-slate-100 text-slate-800',
+      medium: 'bg-blue-100 text-blue-900',
+      high: 'bg-orange-100 text-orange-900',
+      critical: 'bg-red-100 text-red-900',
     };
 
-    const labels = {
-      low: 'Niski',
-      medium: 'Średni',
-      high: 'Wysoki',
-      critical: 'Krytyczny',
-    };
-
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[priority as keyof typeof styles]}`}>
-        {labels[priority as keyof typeof labels]}
-      </span>
-    );
+    return <span className={`${base} ${styles[priority]}`}>{priorityLabels[priority]}</span>;
   };
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('pl-PL', {
+  const formatDate = (input: Date) =>
+    new Date(input).toLocaleDateString('pl-PL', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     });
-  };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="mb-8">
+    <div className="min-h-screen bg-app py-8">
+      <div className="mx-auto w-full max-w-6xl px-6">
+        <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
+          <div className="mb-8 flex flex-col gap-4">
             <button
+              type="button"
               onClick={() => router.push('/')}
-              className="text-blue-600 hover:text-blue-800 mb-4"
+              className="inline-flex w-fit items-center gap-2 text-sm font-medium text-secondary transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
             >
-              ← Powrót do strony głównej
+              <span aria-hidden="true">←</span> Powrót do strony głównej
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Panel Pracownika ZUS</h1>
-            <p className="text-gray-600 mt-2">Zarządzanie zgłoszeniami obywateli</p>
+            <div>
+              <h1 className="text-3xl font-semibold text-primary">Panel pracownika ZUS</h1>
+              <p className="mt-2 text-sm text-muted">
+                Przegląd zgłoszeń z wirtualnego asystenta. Obecnie korzystamy z danych testowych – po integracji
+                z backendem lista zostanie zsynchronizowana z systemami ZUS.
+              </p>
+            </div>
           </div>
 
-          <div className="mb-6 flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+          <div className="mb-6 flex flex-col gap-4 border border-subtle bg-surface-subdued p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex w-full gap-3 sm:w-2/3">
               <input
-                type="text"
-                placeholder="Szukaj po tytule, nazwisku lub numerze..."
+                type="search"
+                placeholder="Szukaj po tytule, nazwisku, e-mailu lub numerze sprawy"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="flex-1 rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
               />
             </div>
-            <div>
+            <div className="flex w-full items-center gap-3 sm:w-auto">
+              <label htmlFor="status" className="text-sm font-medium text-secondary">
+                Status
+              </label>
               <select
+                id="status"
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as IncidentStatus | 'all')}
-                className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(event) => setFilterStatus(event.target.value as IncidentStatus | 'all')}
+                className="rounded-md border border-subtle bg-input px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
               >
-                <option value="all">Wszystkie statusy</option>
+                <option value="all">Wszystkie</option>
                 <option value="pending">Oczekujące</option>
                 <option value="in-progress">W trakcie</option>
                 <option value="resolved">Rozwiązane</option>
@@ -111,78 +129,58 @@ export default function EmployeeDashboard() {
             </div>
           </div>
 
-          <div className="mb-4 text-sm text-gray-600">
-            Wyświetlono {filteredIncidents.length} z {incidents.length} zgłoszeń
+          <div className="mb-4 text-sm text-muted">
+            {isLoading ? 'Ładowanie danych…' : `Wyświetlono ${filteredIncidents.length} z ${incidents.length} zgłoszeń`}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b-2 border-gray-200">
+          <div className="overflow-hidden rounded-lg border border-subtle">
+            <table className="w-full divide-y divide-subtle text-sm">
+              <thead className="bg-surface-subdued text-xs font-medium uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nr
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tytuł
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Zgłaszający
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Kategoria
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priorytet
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Akcje
-                  </th>
+                  <th className="px-4 py-3 text-left">Nr</th>
+                  <th className="px-4 py-3 text-left">Tytuł</th>
+                  <th className="px-4 py-3 text-left">Zgłaszający</th>
+                  <th className="px-4 py-3 text-left">Kategoria</th>
+                  <th className="px-4 py-3 text-left">Priorytet</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Data</th>
+                  <th className="px-4 py-3 text-left">Akcje</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-subtle bg-surface">
                 {filteredIncidents.map((incident) => (
-                  <tr key={incident.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      #{incident.id}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
-                      {incident.title}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {incident.reporterName}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {incident.category}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm">
-                      {getPriorityBadge(incident.priority)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm">
-                      {getStatusBadge(incident.status)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {formatDate(incident.createdAt)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                  <tr key={incident.id} className="transition hover:bg-surface-subdued">
+                    <td className="px-4 py-3 font-semibold text-secondary">#{incident.id}</td>
+                    <td className="px-4 py-3 text-primary">{incident.title}</td>
+                    <td className="px-4 py-3 text-secondary">{incident.reporterName}</td>
+                    <td className="px-4 py-3 text-secondary">{incident.category}</td>
+                    <td className="px-4 py-3">{getPriorityBadge(incident.priority)}</td>
+                    <td className="px-4 py-3">{getStatusBadge(incident.status)}</td>
+                    <td className="px-4 py-3 text-secondary">{formatDate(incident.createdAt)}</td>
+                    <td className="px-4 py-3">
                       <button
+                        type="button"
                         onClick={() => router.push(`/dashboard/employee/${incident.id}`)}
-                        className="text-blue-600 hover:text-blue-800 font-medium"
+                        className="text-sm font-semibold text-(--color-accent) transition hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                       >
                         Szczegóły →
                       </button>
                     </td>
                   </tr>
                 ))}
-                {filteredIncidents.length === 0 && (
+
+                {!isLoading && filteredIncidents.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                      Brak zgłoszeń spełniających kryteria wyszukiwania
+                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">
+                      Brak zgłoszeń spełniających kryteria wyszukiwania.
+                    </td>
+                  </tr>
+                )}
+
+                {isLoading && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">
+                      Trwa ładowanie danych testowych…
                     </td>
                   </tr>
                 )}
