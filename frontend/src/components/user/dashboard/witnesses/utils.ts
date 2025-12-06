@@ -21,26 +21,26 @@ export const WITNESS_FIELD_VALIDATORS: Partial<Record<WitnessEditableField, (val
   imie: (value) => {
     const normalized = value.trim();
     if (!normalized) {
-      return 'Dodaj imię świadka, żebyśmy wiedzieli, z kim się skontaktować.';
+      return 'Podaj imię świadka, aby wskazać osobę do kontaktu.';
     }
     if (normalized.length < 2) {
-      return 'Wpisz imię świadka w pełnej formie (minimum 2 znaki).';
+      return 'Wpisz imię świadka w pełnej formie (co najmniej 2 znaki).';
     }
     if (/\d/.test(normalized)) {
-      return 'W imieniu świadka nie używamy cyfr.';
+      return 'Imię świadka nie może zawierać cyfr.';
     }
     return null;
   },
   nazwisko: (value) => {
     const normalized = value.trim();
     if (!normalized) {
-      return 'Dodaj nazwisko świadka, aby ułatwić kontakt.';
+      return 'Podaj nazwisko świadka, aby ułatwić kontakt.';
     }
     if (normalized.length < 2) {
-      return 'Wpisz nazwisko świadka w pełnej formie (minimum 2 znaki).';
+      return 'Wpisz nazwisko świadka w pełnej formie (co najmniej 2 znaki).';
     }
     if (/\d/.test(normalized)) {
-      return 'W nazwisku świadka nie używamy cyfr.';
+      return 'Nazwisko świadka nie może zawierać cyfr.';
     }
     return null;
   },
@@ -60,7 +60,7 @@ export const WITNESS_FIELD_VALIDATORS: Partial<Record<WitnessEditableField, (val
       return null;
     }
     if (normalized.length > 10) {
-      return 'Numer domu jest dość długi – skróć go do 10 znaków.';
+      return 'Numer domu jest zbyt długi, skróć go do 10 znaków.';
     }
     return null;
   },
@@ -70,7 +70,7 @@ export const WITNESS_FIELD_VALIDATORS: Partial<Record<WitnessEditableField, (val
       return null;
     }
     if (normalized.length > 10) {
-      return 'Numer lokalu jest dość długi – skróć go do 10 znaków.';
+      return 'Numer lokalu jest zbyt długi, skróć go do 10 znaków.';
     }
     return null;
   },
@@ -90,7 +90,7 @@ export const WITNESS_FIELD_VALIDATORS: Partial<Record<WitnessEditableField, (val
       return null;
     }
     if (!/^\d{2}-?\d{3}$/.test(normalized)) {
-      return 'Podaj kod pocztowy w formacie 12-345 – możesz wpisać go z myślnikiem lub bez.';
+      return 'Podaj kod pocztowy w formacie 12-345, możesz wpisać go z myślnikiem lub bez.';
     }
     return null;
   },

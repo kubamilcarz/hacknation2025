@@ -9,21 +9,22 @@ import {
   type WitnessEditableField,
   witnessFieldKey,
 } from '@/components/user/dashboard/witnesses/utils';
-import { useDocuments } from '@/context/DocumentContext';
 import { defaultDocumentData } from '@/lib/mock-documents';
+import { downloadDocumentSummary } from '@/lib/services/documentService';
 import type { CreateDocumentInput } from '@/lib/services/documentService';
+import type { Document } from '@/types/document';
 
 const STEPS: IncidentWizardStep[] = [
   {
     id: 'identity',
     title: 'Twoje dane',
-    description: 'Uzupełnij podstawowe informacje o sobie. W razie czego zawsze możesz do nich wrócić.',
+    description: 'Uzupełnij podstawowe informacje o sobie. Dane możesz aktualizować na każdym etapie.',
     info: {
       label: 'Dlaczego prosimy o dane?',
       content: (
         <div className="space-y-2">
-          <p>Te informacje pozwolą ZUS powiązać zgłoszenie z Twoim kontem i uniknąć dodatkowych wyjaśnień.</p>
-          <p>Jeśli nie masz czegoś pod ręką, zostaw pole puste — kreator przypomni o nim przy kolejnej wizycie.</p>
+          <p>Dane pozwalają ZUS powiązać zgłoszenie z Twoim kontem i ograniczyć liczbę wezwań do uzupełnień.</p>
+          <p>Jeżeli informacji brakuje, pozostaw pole puste, kreator przypomni o nim przy kolejnej wizycie.</p>
         </div>
       ),
     },
@@ -37,7 +38,7 @@ const STEPS: IncidentWizardStep[] = [
       content: (
         <div className="space-y-2">
           <p>Na ten adres ZUS wyśle decyzję lub prośbę o uzupełnienia. Możesz wskazać dowolne miejsce, w którym odbierasz pocztę.</p>
-          <p>Jeżeli mieszkasz poza Polską, wpisz ostatni krajowy adres — to ułatwi dalszą obsługę sprawy.</p>
+          <p>Jeżeli mieszkasz poza Polską, wpisz ostatni krajowy adres, co ułatwi dalszą obsługę sprawy.</p>
         </div>
       ),
     },
@@ -57,7 +58,7 @@ const STEPS: IncidentWizardStep[] = [
       content: (
         <div className="space-y-2">
           <p>Świadek pomaga potwierdzić przebieg wypadku. Wpisz dane osób obecnych na miejscu lub tych, które znają sytuację.</p>
-          <p>Jeżeli nie było świadków, przejdź dalej — zgłoszenie nadal będzie kompletne.</p>
+          <p>Jeżeli nie było świadków, przejdź dalej, zgłoszenie nadal będzie kompletne.</p>
         </div>
       ),
     },
@@ -98,7 +99,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (!/^\d{11}$/.test(normalized)) {
-      return 'PESEL powinien zawierać 11 cyfr – sprawdź, czy żadna się nie zgubiła.';
+      return 'PESEL musi zawierać 11 cyfr, sprawdź czy numer jest kompletny.';
     }
     return null;
   },
@@ -108,7 +109,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (!/^[A-Z]{3}\d{6}$/.test(normalized)) {
-      return 'Podaj numer dokumentu w formacie ABC123456 (trzy litery i sześć cyfr).';
+      return 'Podaj numer dokumentu w formacie ABC123456, czyli trzy litery i sześć cyfr.';
     }
     return null;
   },
@@ -118,10 +119,10 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (normalized.length < 2) {
-      return 'Wpisz pełne imię (minimum 2 znaki).';
+      return 'Wpisz pełne imię (co najmniej 2 znaki).';
     }
     if (/\d/.test(normalized)) {
-      return 'W imieniu nie używamy cyfr.';
+      return 'Imię nie może zawierać cyfr.';
     }
     return null;
   },
@@ -131,10 +132,10 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (normalized.length < 2) {
-      return 'Wpisz pełne nazwisko (minimum 2 znaki).';
+      return 'Wpisz pełne nazwisko (co najmniej 2 znaki).';
     }
     if (/\d/.test(normalized)) {
-      return 'W nazwisku nie używamy cyfr.';
+      return 'Nazwisko nie może zawierać cyfr.';
     }
     return null;
   },
@@ -145,7 +146,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
     }
     const digitsOnly = normalized.replace(/\D/g, '');
     if (digitsOnly.length < 9 || digitsOnly.length > 15) {
-      return 'Numer telefonu powinien mieć od 9 do 15 cyfr – wpisz go tak, jak najłatwiej się z Tobą skontaktować.';
+      return 'Numer telefonu powinien mieć od 9 do 15 cyfr, podaj preferowany numer do kontaktu.';
     }
     return null;
   },
@@ -165,7 +166,7 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
       return REQUIRED_FIELD_MESSAGE;
     }
     if (normalized.length < 20) {
-      return 'Opisz zdarzenie w kilku zdaniach (minimum 20 znaków).';
+      return 'Opisz zdarzenie w kilku zdaniach (co najmniej 20 znaków).';
     }
     return null;
   },
@@ -249,8 +250,6 @@ const getWitnessFieldErrorMessage = (fieldName: WitnessEditableField, rawValue: 
 };
 
 export function IncidentReportProvider({ children }: { children: ReactNode }) {
-  const { createDocument, downloadDocumentFile } = useDocuments();
-
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [furthestStepIndex, setFurthestStepIndex] = useState(0);
   const [incidentDraft, setIncidentDraft] = useState<CreateDocumentInput>(createInitialIncidentDraft);
@@ -261,6 +260,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<'idle' | 'docx' | 'pdf'>('idle');
   const [witnessStatements, setWitnessStatements] = useState<WitnessStatementAttachment[]>([]);
+  const [preparedDocument, setPreparedDocument] = useState<Document | null>(null);
 
   const currentStep = STEPS[currentStepIndex] ?? STEPS[0];
   const witnesses = incidentDraft.witnesses ?? [];
@@ -351,6 +351,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     if (shouldResetError) {
       setSubmitError(null);
       setSubmittedDocumentId(null);
+      setPreparedDocument(null);
     }
   }, [runFieldValidation]);
 
@@ -542,32 +543,42 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
         szczegoly_okolicznosci: (incidentDraft.szczegoly_okolicznosci ?? '').trim(),
       };
 
-      const createdDocument = await createDocument(payload);
-      setSubmittedDocumentId(createdDocument.id ?? null);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
+      });
+
+      const summaryDocument: Document = {
+        ...defaultDocumentData,
+        ...payload,
+        id: undefined,
+      };
+
+      setPreparedDocument(summaryDocument);
+      setSubmittedDocumentId(Date.now());
       setSubmitState('success');
     } catch (error) {
       console.error(error);
       setSubmitState('error');
       setSubmitError('Nie udało się przygotować formularza. Spróbuj ponownie.');
     }
-  }, [createDocument, incidentDraft, submitState]);
+  }, [incidentDraft, submitState]);
 
   const handleDownload = useCallback(async (format: 'docx' | 'pdf') => {
-    if (submittedDocumentId == null) {
+    if (submittedDocumentId == null || !preparedDocument) {
       setSubmitError('Najpierw przygotuj formularz, a potem spróbuj pobrania ponownie.');
       return;
     }
 
     setDownloadState(format);
     try {
-      await downloadDocumentFile(submittedDocumentId, format);
+      downloadDocumentSummary(preparedDocument, format);
     } catch (error) {
       console.error(error);
       setSubmitError('Nie udało się pobrać pliku. Spróbuj ponownie.');
     } finally {
       setDownloadState('idle');
     }
-  }, [downloadDocumentFile, submittedDocumentId]);
+  }, [preparedDocument, submittedDocumentId]);
 
   const hasNextStep = currentStepIndex < STEPS.length - 1;
   const isLastStep = currentStepIndex === STEPS.length - 1;

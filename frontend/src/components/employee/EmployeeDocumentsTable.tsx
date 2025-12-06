@@ -145,7 +145,7 @@ export default function EmployeeDocumentsTable({
         label: "ID",
         minWidth: 100,
         cellClassName: "font-semibold text-secondary",
-        render: (documentRow) => <span className="block truncate">{documentRow.id ?? "—"}</span>,
+        render: (documentRow) => <span className="block truncate">{documentRow.id ?? "Brak danych"}</span>,
         sortable: true,
         defaultSortDirection: "asc",
         sticky: "left",

@@ -58,9 +58,9 @@ export function WitnessesStepSection() {
       }
     >
       {witnesses.length === 0 && (
-        <div className="md:col-span-2">
+        <div className="md:col-span-1 lg:max-w-xl">
           <IncidentAiSuggestion title="Brak świadków?">
-            Jeśli nikt nie widział zdarzenia, pozostaw listę pustą i przejdź dalej – zgłoszenie nadal będzie kompletne.
+            Jeśli nikt nie widział zdarzenia, pozostaw listę pustą i przejdź dalej, zgłoszenie nadal będzie kompletne.
           </IncidentAiSuggestion>
         </div>
       )}
@@ -115,7 +115,7 @@ export function WitnessesStepSection() {
       })}
 
       {witnesses.length > 0 && (
-        <div className="md:col-span-2">
+        <div className="md:col-span-1 lg:max-w-xl">
           <div className="rounded-xl border border-subtle bg-surface p-4 shadow-sm space-y-4">
             <div className="mb-3 space-y-1">
               <p className="text-sm font-semibold text-primary">Oświadczenie świadka</p>

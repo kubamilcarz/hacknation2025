@@ -23,7 +23,7 @@ export function ReviewStepSection() {
       {hasSubmittedSuccessfully ? (
         <div className="space-y-4">
           <IncidentAiSuggestion title="Formularz gotowy do pobrania">
-            Twoje zgłoszenie zostało przygotowane w formie pliku. Pobierz dokument i samodzielnie przekaż go do ZUS — system nie wysyła formularza w Twoim imieniu. W razie potrzeby wróć do wcześniejszych kroków, popraw treść i przygotuj nową wersję.
+              Zgłoszenie zostało przygotowane w formie pliku. Pobierz dokument i przekaż go do ZUS, system nie wysyła formularza w Twoim imieniu. W razie potrzeby wróć do wcześniejszych kroków, popraw treść i przygotuj nową wersję.
           </IncidentAiSuggestion>
           {witnessStatements.length > 0 && (
             <div className="rounded-xl border border-subtle bg-surface p-4">
@@ -36,9 +36,9 @@ export function ReviewStepSection() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-xs text-muted">
-                Zapisz te pliki razem z formularzem — będziesz je dołączać przy przekazywaniu dokumentów do ZUS.
-              </p>
+                <p className="mt-3 text-xs text-muted">
+                  Zapisz te pliki razem z formularzem, wykorzystasz je przy przekazywaniu dokumentów do ZUS.
+                </p>
             </div>
           )}
           <div className="rounded-xl border border-dashed border-subtle bg-surface p-4">
@@ -83,9 +83,9 @@ export function ReviewStepSection() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-muted">
-            Po przygotowaniu formularza pobierz go wraz z tymi plikami i prześlij wszystko do ZUS.
-          </p>
+            <p className="mt-3 text-xs text-muted">
+              Po przygotowaniu formularza pobierz go wraz z tymi plikami i prześlij komplet do ZUS.
+            </p>
         </div>
       )}
       {submitError && (

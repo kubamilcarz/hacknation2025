@@ -347,7 +347,7 @@ export default function EmployeeDashboard() {
 
       const rows = dataset
         .map((documentRow) => [
-          documentRow.id ?? '—',
+          documentRow.id ?? 'Brak danych',
           documentRow.imie,
           documentRow.nazwisko,
           documentRow.pesel,

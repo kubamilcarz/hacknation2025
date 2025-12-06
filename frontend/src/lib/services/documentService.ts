@@ -25,16 +25,16 @@ const EXPORT_COLUMNS: ExportColumn[] = [
 ];
 
 const PDF_TABLE_COLUMNS: Array<ExportColumn & { lengthHint?: number }> = [
-  { label: "ID", accessor: (document) => String(document.id ?? "—"), lengthHint: 6 },
+  { label: "ID", accessor: (document) => String(document.id ?? "Brak danych"), lengthHint: 6 },
   { label: "Data wypadku", accessor: (document) => formatPdfIncidentDate(document), lengthHint: 18 },
   {
     label: "Poszkodowany",
-    accessor: (document) => normalizeCellValue(`${document.imie} ${document.nazwisko}`.trim()) || "—",
+    accessor: (document) => normalizeCellValue(`${document.imie} ${document.nazwisko}`.trim()) || "Brak danych",
     lengthHint: 20,
   },
-  { label: "PESEL", accessor: (document) => document.pesel || "—", lengthHint: 14 },
-  { label: "Miejsce wypadku", accessor: (document) => document.miejsce_wypadku || "—", lengthHint: 28 },
-  { label: "Rodzaj urazu", accessor: (document) => document.rodzaj_urazow || "—", lengthHint: 28 },
+  { label: "PESEL", accessor: (document) => document.pesel || "Brak danych", lengthHint: 14 },
+  { label: "Miejsce wypadku", accessor: (document) => document.miejsce_wypadku || "Brak danych", lengthHint: 28 },
+  { label: "Rodzaj urazu", accessor: (document) => document.rodzaj_urazow || "Brak danych", lengthHint: 28 },
 ];
 
 const NOTO_SANS_FONT_BASE64 = `
@@ -577,14 +577,9 @@ class MockDocumentApi implements DocumentApi {
     }
 
     const domainDocument = mapDocumentDetailDtoToDocument(found);
-    if (format === "pdf") {
-      const pdfBlob = createDocumentSummaryPdf(domainDocument);
-      downloadBlobWithName(pdfBlob, `zgloszenie-${id}.pdf`);
-      return;
-    }
-
-    const docxBlob = createDocumentSummaryDocx(domainDocument);
-    downloadBlobWithName(docxBlob, `zgloszenie-${id}.docx`);
+    downloadDocumentSummary(domainDocument, format, {
+      fileName: `zgloszenie-${id}.${format === "pdf" ? "pdf" : "docx"}`,
+    });
   }
 
   private handleExport(format: DocumentExportFormat, documents: DocumentDetailDto[]) {
@@ -766,6 +761,27 @@ function createDocumentSummaryDocx(document: Document) {
   return new Blob([html], {
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document;charset=utf-8",
   });
+}
+
+type DownloadDocumentSummaryOptions = {
+  fileName?: string;
+};
+
+export function downloadDocumentSummary(
+  document: Document,
+  format: "docx" | "pdf",
+  options: DownloadDocumentSummaryOptions = {}
+) {
+  const targetFileName = buildSummaryFileName(format, options.fileName);
+
+  if (format === "pdf") {
+    const pdfBlob = createDocumentSummaryPdf(document);
+    downloadBlobWithName(pdfBlob, targetFileName);
+    return;
+  }
+
+  const docxBlob = createDocumentSummaryDocx(document);
+  downloadBlobWithName(docxBlob, targetFileName);
 }
 
 function buildDocumentSummaryRows(document: Document): string[][] {
@@ -1414,6 +1430,26 @@ function downloadBlobWithName(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+function buildSummaryFileName(format: "docx" | "pdf", explicitName?: string) {
+  const extension = format === "pdf" ? "pdf" : "docx";
+  if (explicitName) {
+    return ensureFileExtension(explicitName, extension);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  return `zgloszenie-${today}.${extension}`;
+}
+
+function ensureFileExtension(fileName: string, extension: string) {
+  const normalized = fileName.trim();
+  if (normalized.toLowerCase().endsWith(`.${extension}`)) {
+    return normalized;
+  }
+
+  const withoutExtension = normalized.replace(/\.[^/.]+$/, "");
+  return `${withoutExtension}.${extension}`;
+}
+
 const useMock = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
 
 const documentService: DocumentService = (() => {
@@ -1424,4 +1460,4 @@ const documentService: DocumentService = (() => {
   return new DefaultDocumentService(api);
 })();
 
-export { documentService };
+export { documentService, downloadDocumentSummary };

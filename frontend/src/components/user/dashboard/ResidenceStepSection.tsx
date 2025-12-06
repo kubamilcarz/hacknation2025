@@ -13,7 +13,7 @@ export function ResidenceStepSection() {
         value={incidentDraft.ulica ?? ''}
         onChange={handleInputChange('ulica')}
         optional
-        hint="Jeśli na adresie brakuje numeru — nic się nie dzieje, zostaw pole puste."
+        hint="Jeżeli w adresie brakuje numeru, pozostaw pole puste."
       />
     </IncidentWizardSection>
   );
