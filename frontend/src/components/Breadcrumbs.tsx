@@ -10,11 +10,11 @@ interface BreadcrumbItem {
 }
 
 const labelTranslations: Record<string, string> = {
-  home: 'Generator zgłoszeń',
-  'report-incident': 'Zgłoszenie zdarzenia',
+  home: 'Generator zawiadomień',
+  'report-incident': 'Zawiadomienie o wypadku',
   panel: 'Panel weryfikacji',
   'incident-list': 'Lista dokumentów',
-  report: 'Dodaj zgłoszenie',
+  report: 'Dodaj zawiadomienie',
 };
 
 function resolveLabel(item: BreadcrumbItem) {

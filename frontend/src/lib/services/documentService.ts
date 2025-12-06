@@ -12,6 +12,18 @@ const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_M
 
 type ExportColumn = { label: string; accessor: (document: Document) => string };
 
+const PDF_FONT_NAME = "Inter";
+const PDF_FONT_BASE_PATH = "/fonts";
+
+type PdfFontVariant = { file: string; style: "normal" | "bold" };
+
+const PDF_FONT_VARIANTS: PdfFontVariant[] = [
+  { file: "Inter-Regular.ttf", style: "normal" },
+  { file: "Inter-Bold.ttf", style: "bold" },
+];
+
+let pdfFontRegistrationPromise: Promise<Record<string, string>> | null = null;
+
 const EXPORT_COLUMNS: ExportColumn[] = [
   { label: "ID", accessor: (document) => String(document.id ?? "-") },
   { label: "Imię", accessor: (document) => document.imie },
@@ -51,6 +63,94 @@ function formatPdfIncidentDate(document: Document) {
 
 function normalizeCellValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+async function ensurePdfFont(doc: any) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const fontList = typeof doc.getFontList === "function" ? doc.getFontList() : null;
+    const registeredStyles = fontList?.[PDF_FONT_NAME];
+    const hasNormal = Array.isArray(registeredStyles) && registeredStyles.includes("normal");
+    const hasBold = Array.isArray(registeredStyles) && registeredStyles.includes("bold");
+    if (hasNormal && hasBold) {
+      doc.setFont(PDF_FONT_NAME, "normal");
+      return;
+    }
+
+    const fontData = await loadPdfFonts();
+    let fontRegistered = false;
+
+    for (const variant of PDF_FONT_VARIANTS) {
+      if ((variant.style === "normal" && hasNormal) || (variant.style === "bold" && hasBold)) {
+        continue;
+      }
+      const fontBase64 = fontData[variant.file];
+      if (!fontBase64) {
+        continue;
+      }
+
+      try {
+        doc.addFileToVFS(variant.file, fontBase64);
+        // In jsPDF v3, the signature is: addFont(fileNameInVFS, fontName, fontStyle)
+        // The fontStyle parameter should match the weight (normal/bold)
+        const fontWeight = variant.style === "bold" ? "bold" : "normal";
+        doc.addFont(variant.file, PDF_FONT_NAME, fontWeight);
+        fontRegistered = true;
+      } catch (error) {
+        console.warn(`Failed to register font ${variant.file}:`, error);
+      }
+    }
+
+    if (fontRegistered || hasNormal) {
+      doc.setFont(PDF_FONT_NAME, "normal");
+    } else {
+      doc.setFont("helvetica", "normal");
+    }
+  } catch (error) {
+    console.error("Error ensuring PDF font:", error);
+    doc.setFont("helvetica", "normal");
+  }
+}
+
+async function loadPdfFonts(): Promise<Record<string, string>> {
+  if (!pdfFontRegistrationPromise) {
+    pdfFontRegistrationPromise = (async () => {
+      const entries = await Promise.all(
+        PDF_FONT_VARIANTS.map(async (variant) => {
+          const response = await fetch(`${PDF_FONT_BASE_PATH}/${variant.file}`);
+          if (!response.ok) {
+            throw new Error(`Font download failed: ${variant.file}`);
+          }
+
+          const buffer = await response.arrayBuffer();
+          return [variant.file, arrayBufferToBase64(buffer)] as const;
+        })
+      );
+
+      return Object.fromEntries(entries);
+    })().catch((error) => {
+      console.error("Nie udało się pobrać czcionek PDF", error);
+      pdfFontRegistrationPromise = null;
+      return {} as Record<string, string>;
+    });
+  }
+
+  return pdfFontRegistrationPromise;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
 }
 
 export type DocumentListSortField =
@@ -445,15 +545,44 @@ function downloadPdf(items: Document[]) {
     if (!autoTable) {
       return;
     }
+    const margin = { top: 48, bottom: 40, left: 48, right: 48 };
     const doc = new jsPDF({ orientation: "landscape", unit: "pt" });
+    await ensurePdfFont(doc);
+    const availableWidth = doc.internal.pageSize.getWidth() - margin.left - margin.right;
+    const totalLengthHint = PDF_TABLE_COLUMNS.reduce((sum, column) => sum + (column.lengthHint ?? 20), 0);
+    const columnStyles = PDF_TABLE_COLUMNS.reduce<Record<number, { cellWidth: number; overflow: "linebreak" }>>(
+      (acc, column, index) => {
+        const relative = (column.lengthHint ?? 20) / totalLengthHint;
+        const width = Math.max(relative * availableWidth, 72);
+        acc[index] = { cellWidth: width, overflow: "linebreak" };
+        return acc;
+      },
+      {}
+    );
+    doc.setFontSize(11);
 
     autoTable(doc, {
       head: [headers],
       body: rows,
-      styles: { fontSize: 10, cellPadding: 6 },
-      headStyles: { fillColor: [16, 61, 122], textColor: [255, 255, 255] },
+      styles: {
+        font: PDF_FONT_NAME,
+        fontSize: 11,
+        textColor: [28, 35, 51],
+        cellPadding: { top: 6, right: 12, bottom: 6, left: 12 },
+        lineColor: [216, 223, 235],
+        lineWidth: 0.4,
+      },
+      headStyles: {
+        fillColor: [16, 61, 122],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "left",
+      },
+      bodyStyles: { valign: "middle" },
       alternateRowStyles: { fillColor: [245, 247, 252] },
-      margin: { top: 40, bottom: 30, left: 40, right: 40 },
+      columnStyles,
+      tableWidth: availableWidth,
+      margin,
     });
 
     doc.save(`${EXPORT_FILE_PREFIX}-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -476,13 +605,15 @@ async function createDocumentSummaryPdf(document: Document): Promise<Blob> {
   }
 
   const doc = new jsPDF({ orientation: "portrait", unit: "pt" });
+  await ensurePdfFont(doc);
+  doc.setFontSize(11);
   const headers = ["Pole", "Wartość"];
   const rows = buildDocumentSummaryRows(document);
 
   autoTable(doc, {
     head: [headers],
     body: rows,
-    styles: { fontSize: 11, cellPadding: 6 },
+    styles: { font: PDF_FONT_NAME, fontSize: 11, cellPadding: 6 },
     headStyles: { fillColor: [16, 61, 122], textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [245, 247, 252] },
     margin: { top: 40, bottom: 40, left: 40, right: 40 },

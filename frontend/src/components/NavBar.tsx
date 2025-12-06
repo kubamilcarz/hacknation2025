@@ -44,7 +44,7 @@ export default function NavBar({ variant }: NavBarProps = {}) {
             />
           </div>
           <span className="hidden text-sm font-semibold text-muted md:inline">
-            AccidentFlow | {isEmployee ? "Panel Weryfikacji" : "Generator Zgłoszeń"}
+            AccidentFlow | {isEmployee ? "Panel Weryfikacji" : "Generator Zawiadomień"}
           </span>
         </Link>
  
