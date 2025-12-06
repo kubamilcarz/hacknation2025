@@ -2,6 +2,8 @@ export interface Witness {
   id?: number;
   imie: string;
   nazwisko: string;
+  numer_telefonu?: string | null;
+  adres_email?: string | null;
   ulica: string;
   nr_domu: string;
   nr_lokalu: string | null;

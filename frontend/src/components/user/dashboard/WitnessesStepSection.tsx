@@ -2,7 +2,11 @@ import { useRef, type ChangeEvent } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
-import { WITNESS_EDITABLE_FIELDS, type WitnessEditableField, witnessFieldKey } from '@/components/user/dashboard/witnesses/utils';
+import {
+  WITNESS_EDITABLE_FIELDS,
+  type WitnessEditableField,
+  witnessFieldKey,
+} from '@/components/user/dashboard/witnesses/utils';
 import { useIncidentReport } from '@/context/IncidentReportContext';
 import { formatFileSize } from '@/lib/utils/formatFileSize';
 
@@ -105,7 +109,10 @@ export function WitnessesStepSection() {
                     onChange={handleWitnessInputChange(index, field)}
                     error={validationErrors[witnessFieldKey(index, field)]}
                     optional={!isWitnessFieldRequired(field)}
-                    hint={field === 'kod_pocztowy' ? 'Wpisz w formacie 12-345.' : undefined}
+                    hint={getWitnessHint(field)}
+                    type={getWitnessInputType(field)}
+                    autoComplete={getWitnessAutoComplete(field)}
+                    maxLength={field === 'numer_telefonu' ? 20 : undefined}
                   />
                 ))}
               </div>
@@ -187,6 +194,10 @@ const getWitnessLabel = (field: WitnessEditableField) => {
       return 'Imię';
     case 'nazwisko':
       return 'Nazwisko';
+    case 'numer_telefonu':
+      return 'Telefon kontaktowy';
+    case 'adres_email':
+      return 'Adres e-mail';
     case 'ulica':
       return 'Ulica';
     case 'nr_domu':
@@ -204,4 +215,38 @@ const getWitnessLabel = (field: WitnessEditableField) => {
   }
 };
 
+
+  const getWitnessHint = (field: WitnessEditableField) => {
+    switch (field) {
+      case 'kod_pocztowy':
+        return 'Wpisz w formacie 12-345.';
+      case 'numer_telefonu':
+        return 'Dodaj numer, pod który ZUS może zadzwonić w razie pytań.';
+      case 'adres_email':
+        return 'Adres e-mail pomoże skrócić czas kontaktu, jeśli świadek go posiada.';
+      default:
+        return undefined;
+    }
+  };
+
+  const getWitnessInputType = (field: WitnessEditableField) => {
+    if (field === 'adres_email') {
+      return 'email';
+    }
+    if (field === 'numer_telefonu') {
+      return 'tel';
+    }
+    return undefined;
+  };
+
+  const getWitnessAutoComplete = (field: WitnessEditableField) => {
+    switch (field) {
+      case 'adres_email':
+        return 'email';
+      case 'numer_telefonu':
+        return 'tel';
+      default:
+        return undefined;
+    }
+  };
 const isWitnessFieldRequired = (field: WitnessEditableField) => field === 'imie' || field === 'nazwisko';

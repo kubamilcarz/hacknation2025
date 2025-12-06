@@ -528,6 +528,8 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
           ...witness,
           imie: (witness.imie ?? '').trim(),
           nazwisko: (witness.nazwisko ?? '').trim(),
+          numer_telefonu: (witness.numer_telefonu ?? '').trim(),
+          adres_email: (witness.adres_email ?? '').trim(),
           ulica: (witness.ulica ?? '').trim(),
           nr_domu: (witness.nr_domu ?? '').trim(),
           nr_lokalu: (witness.nr_lokalu ?? '').trim(),

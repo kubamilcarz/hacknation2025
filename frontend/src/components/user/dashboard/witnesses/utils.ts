@@ -1,11 +1,24 @@
 import type { Witness } from '@/types/document';
 
-export const WITNESS_EDITABLE_FIELDS = ['imie', 'nazwisko', 'ulica', 'nr_domu', 'nr_lokalu', 'miejscowosc', 'kod_pocztowy', 'nazwa_panstwa'] as const;
+export const WITNESS_EDITABLE_FIELDS = [
+  'imie',
+  'nazwisko',
+  'numer_telefonu',
+  'adres_email',
+  'ulica',
+  'nr_domu',
+  'nr_lokalu',
+  'miejscowosc',
+  'kod_pocztowy',
+  'nazwa_panstwa',
+] as const;
 export type WitnessEditableField = (typeof WITNESS_EDITABLE_FIELDS)[number];
 
 export const createEmptyWitness = (): Witness => ({
   imie: '',
   nazwisko: '',
+  numer_telefonu: '',
+  adres_email: '',
   ulica: '',
   nr_domu: '',
   nr_lokalu: '',
@@ -42,6 +55,32 @@ export const WITNESS_FIELD_VALIDATORS: Partial<Record<WitnessEditableField, (val
     if (/\d/.test(normalized)) {
       return 'Nazwisko świadka nie może zawierać cyfr.';
     }
+    return null;
+  },
+  numer_telefonu: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const digitsOnly = normalized.replace(/\D/g, '');
+    if (digitsOnly.length < 9 || digitsOnly.length > 15) {
+      return 'Numer telefonu świadka powinien mieć od 9 do 15 cyfr. Popraw wpis lub pozostaw pole puste.';
+    }
+
+    return null;
+  },
+  adres_email: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(normalized)) {
+      return 'Adres e-mail świadka wygląda na nieprawidłowy. Popraw wpis lub pozostaw pole puste.';
+    }
+
     return null;
   },
   ulica: (value) => {

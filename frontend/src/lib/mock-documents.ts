@@ -127,6 +127,8 @@ export const mockDocuments: Document[] = [
       {
         imie: "Piotr",
         nazwisko: "Lis",
+        numer_telefonu: "+48 888 111 222",
+        adres_email: "piotr.lis@example.com",
         ulica: "Płocka",
         nr_domu: "8",
         nr_lokalu: "2",
