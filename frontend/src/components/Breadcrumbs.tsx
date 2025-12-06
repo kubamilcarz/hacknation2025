@@ -13,7 +13,7 @@ const labelTranslations: Record<string, string> = {
   home: 'Generator zgłoszeń',
   'report-incident': 'Zgłoszenie zdarzenia',
   panel: 'Panel weryfikacji',
-  'incident-list': 'Lista zgłoszeń',
+  'incident-list': 'Lista dokumentów',
   report: 'Dodaj zgłoszenie',
 };
 

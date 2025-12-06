@@ -3,30 +3,30 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useIncidents } from '@/context/IncidentContext';
+import { useDocuments } from '@/context/DocumentContext';
 import {
-  incidentService,
-  type IncidentListOptions,
-} from '@/lib/services/incidentService';
-import type { IncidentStatus } from '@/types/incident';
+  documentService,
+  type DocumentListOptions,
+} from '@/lib/services/documentService';
+import type { DocumentStatus } from '@/types/case-document';
 import Footer from '@/components/Footer';
 import DashboardHeader from '@/components/employee/DashboardHeader';
-import IncidentFiltersPanel from '@/components/employee/IncidentFiltersPanel';
-import EmployeeIncidentsTable, {
+import DocumentFiltersPanel from '@/components/employee/DocumentFiltersPanel';
+import EmployeeDocumentsTable, {
   type SortConfig,
   getEmployeeColumnDefaultDirection,
   getEmployeeDefaultSortConfig,
   isEmployeeSortableColumn,
-} from '@/components/employee/EmployeeIncidentsTable';
-import ExportIncidentsModal from '@/components/employee/ExportIncidentsModal';
+} from '@/components/employee/EmployeeDocumentsTable';
+import ExportDocumentsModal from '@/components/employee/ExportDocumentsModal';
 import {
-  INCIDENT_PRIORITY_LABELS,
-  INCIDENT_STATUS_LABELS,
-  INCIDENT_STATUS_VALUES,
-} from '@/lib/constants/incidents';
+  DOCUMENT_PRIORITY_LABELS,
+  DOCUMENT_STATUS_LABELS,
+  DOCUMENT_STATUS_VALUES,
+} from '@/lib/constants/documents';
 
-const isIncidentStatusValue = (value: string | null): value is IncidentStatus =>
-  value != null && INCIDENT_STATUS_VALUES.includes(value as IncidentStatus);
+const isDocumentStatusValue = (value: string | null): value is DocumentStatus =>
+  value != null && DOCUMENT_STATUS_VALUES.includes(value as DocumentStatus);
 
 const isSortDirectionValue = (value: string | null): value is 'asc' | 'desc' =>
   value === 'asc' || value === 'desc';
@@ -37,32 +37,32 @@ export default function EmployeeDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const incidentsContext = useIncidents();
+  const documentsContext = useDocuments();
   const {
-    incidents,
+    documents,
     isLoading,
     totalPages: totalPagesFromService,
     page: currentServicePage,
     pageSize: currentPageSize,
-    loadIncidents,
+    loadDocuments,
     error,
-  } = incidentsContext;
-  const totalCount = incidentsContext.totalCount;
-  const hasLoaded = incidentsContext.hasLoaded;
+  } = documentsContext;
+  const totalCount = documentsContext.totalCount;
+  const hasLoaded = documentsContext.hasLoaded;
   const recordLabel = useMemo(() => {
     if (totalCount === 1) {
-      return 'zgłoszenie';
+      return 'dokument';
     }
     if (totalCount >= 2 && totalCount <= 4) {
-      return 'zgłoszenia';
+      return 'dokumenty';
     }
-    return 'zgłoszeń';
+    return 'dokumentów';
   }, [totalCount]);
-  const hasIncidentsToExport = totalCount > 0;
+  const hasDocumentsToExport = totalCount > 0;
   const statusParam = searchParams.get('status');
-  const initialFilterStatus: IncidentStatus | 'all' = isIncidentStatusValue(statusParam) ? statusParam : 'all';
+  const initialFilterStatus: DocumentStatus | 'all' = isDocumentStatusValue(statusParam) ? statusParam : 'all';
   const initialSearchTerm = searchParams.get('search') ?? '';
-  const [filterStatus, setFilterStatus] = useState<IncidentStatus | 'all'>(initialFilterStatus);
+  const [filterStatus, setFilterStatus] = useState<DocumentStatus | 'all'>(initialFilterStatus);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const searchCommittedValueRef = useRef<string | null>(
     initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
@@ -70,13 +70,13 @@ export default function EmployeeDashboard() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleCreateIncident = useCallback(() => {
+  const handleCreateDocument = useCallback(() => {
     router.push('/dashboard/employee/new');
   }, [router]);
 
-  const handleNavigateToIncident = useCallback(
-    (incidentId: string) => {
-      router.push(`/dashboard/employee/${incidentId}`);
+  const handleNavigateToDocument = useCallback(
+    (documentId: string) => {
+      router.push(`/dashboard/employee/${documentId}`);
     },
     [router]
   );
@@ -112,7 +112,7 @@ export default function EmployeeDashboard() {
     return getEmployeeDefaultSortConfig();
   });
 
-  const currentQueryOptionsRef = useRef<IncidentListOptions>({ page: 1, pageSize: PAGE_SIZE });
+  const currentQueryOptionsRef = useRef<DocumentListOptions>({ page: 1, pageSize: PAGE_SIZE });
 
   const searchParamsString = searchParams.toString();
   const commitQueryParams = useCallback(
@@ -164,11 +164,11 @@ export default function EmployeeDashboard() {
     searchCommittedValueRef.current = searchOption;
 
     const statusParam = params.get('status');
-    if (statusParam && statusParam !== 'all' && !isIncidentStatusValue(statusParam)) {
+    if (statusParam && statusParam !== 'all' && !isDocumentStatusValue(statusParam)) {
       return;
     }
-    const resolvedStatus: IncidentStatus | 'all' =
-      statusParam && isIncidentStatusValue(statusParam) ? statusParam : 'all';
+    const resolvedStatus: DocumentStatus | 'all' =
+      statusParam && isDocumentStatusValue(statusParam) ? statusParam : 'all';
 
     const sortParam = params.get('sort');
     const directionParam = params.get('direction');
@@ -179,14 +179,14 @@ export default function EmployeeDashboard() {
       return;
     }
 
-    const resolvedSort = (hasValidSortParam ? sortParam : defaultSort?.columnId ?? 'createdAt') as IncidentListOptions['sort'];
+    const resolvedSort = (hasValidSortParam ? sortParam : defaultSort?.columnId ?? 'data_wypadku') as DocumentListOptions['sort'];
     const resolvedDirection: 'asc' | 'desc' = hasValidSortParam
       ? (isSortDirectionValue(directionParam)
         ? directionParam
-        : getEmployeeColumnDefaultDirection(sortParam as IncidentListOptions['sort']))
+        : getEmployeeColumnDefaultDirection(sortParam as DocumentListOptions['sort']))
       : defaultSort?.direction ?? 'desc';
 
-    const nextOptions: IncidentListOptions = {
+    const nextOptions: DocumentListOptions = {
       page: normalizedRequestedPage,
       pageSize: currentPageSize,
       search: searchOption,
@@ -196,8 +196,8 @@ export default function EmployeeDashboard() {
     };
 
     currentQueryOptionsRef.current = nextOptions;
-    void loadIncidents(nextOptions);
-  }, [currentPageSize, loadIncidents, normalizedRequestedPage, searchParamsString]);
+    void loadDocuments(nextOptions);
+  }, [currentPageSize, loadDocuments, normalizedRequestedPage, searchParamsString]);
 
   const commitSearchTerm = useCallback(
     (value?: string) => {
@@ -274,8 +274,8 @@ export default function EmployeeDashboard() {
   const handleStatusChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
       const value = event.target.value;
-      const normalized: IncidentStatus | 'all' =
-        value === 'all' ? 'all' : isIncidentStatusValue(value) ? (value as IncidentStatus) : 'all';
+      const normalized: DocumentStatus | 'all' =
+        value === 'all' ? 'all' : isDocumentStatusValue(value) ? (value as DocumentStatus) : 'all';
       commitSearchTerm();
       setFilterStatus(normalized);
       commitQueryParams({
@@ -315,11 +315,11 @@ export default function EmployeeDashboard() {
 
   useEffect(() => {
     const nextStatusParam = searchParams.get('status');
-    const normalizedStatus: IncidentStatus | 'all' = isIncidentStatusValue(nextStatusParam)
+    const normalizedStatus: DocumentStatus | 'all' = isDocumentStatusValue(nextStatusParam)
       ? nextStatusParam
       : 'all';
 
-    if (!isIncidentStatusValue(nextStatusParam) && nextStatusParam != null && nextStatusParam !== 'all') {
+    if (!isDocumentStatusValue(nextStatusParam) && nextStatusParam != null && nextStatusParam !== 'all') {
       commitQueryParams({ status: normalizedStatus === 'all' ? null : normalizedStatus });
       return;
     }
@@ -377,19 +377,20 @@ export default function EmployeeDashboard() {
     const formatCsvField = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
     const header = [
       'Numer sprawy',
-      'Tytuł',
-      'Zgłaszający',
-      'Kategoria',
+      'Poszkodowany',
+      'PESEL',
+      'Miejsce wypadku',
+      'Rodzaj urazu',
+      'Data wypadku',
       'Priorytet',
       'Status',
-      'Data',
     ];
 
     const baseOptions = currentQueryOptionsRef.current;
     const exportPageSize = Math.max(totalCount, baseOptions.pageSize ?? PAGE_SIZE);
 
     try {
-      const response = await incidentService.list({
+      const response = await documentService.list({
         ...baseOptions,
         page: 1,
         pageSize: exportPageSize,
@@ -400,14 +401,15 @@ export default function EmployeeDashboard() {
       }
 
       const rows = dataset
-        .map((incident) => [
-          incident.caseNumber,
-          incident.title,
-          incident.reporterName,
-          incident.category,
-          INCIDENT_PRIORITY_LABELS[incident.priority],
-          INCIDENT_STATUS_LABELS[incident.status],
-          formatDate(incident.createdAt),
+        .map((documentRow) => [
+          documentRow.caseNumber,
+          `${documentRow.imie} ${documentRow.nazwisko}`.trim(),
+          documentRow.pesel ?? '-',
+          documentRow.miejsce_wypadku,
+          documentRow.rodzaj_urazow,
+          formatDate(new Date(documentRow.data_wypadku)),
+          DOCUMENT_PRIORITY_LABELS[documentRow.priority],
+          DOCUMENT_STATUS_LABELS[documentRow.status],
         ]
           .map(formatCsvField)
           .join(';'));
@@ -417,11 +419,11 @@ export default function EmployeeDashboard() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `lista-zgloszen-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `lista-dokumentow-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Nie udało się wyeksportować zgłoszeń.', error);
+      console.error('Nie udało się wyeksportować dokumentów.', error);
     }
   }, [formatDate, totalCount]);
 
@@ -440,7 +442,7 @@ export default function EmployeeDashboard() {
   }, [handleExportCsv, isExporting, totalCount]);
 
   const handleSort = useCallback(
-    (columnId: IncidentListOptions['sort'], direction: 'asc' | 'desc') => {
+    (columnId: DocumentListOptions['sort'], direction: 'asc' | 'desc') => {
       if (sortConfig?.columnId === columnId && sortConfig.direction === direction) {
         return;
       }
@@ -466,13 +468,13 @@ export default function EmployeeDashboard() {
                 { href: '/dashboard/employee', labelKey: 'panel' },
                 { labelKey: 'incident-list' },
               ]}
-              title="Lista zgłoszeń"
-              description="Przegląd zgłoszeń. Możesz filtrować, wyszukiwać i sortować zgłoszenia według różnych kryteriów."
-              onCreateIncident={handleCreateIncident}
+              title="Lista dokumentów"
+              description="Przegląd przetworzonych dokumentów zgłoszeń ZUS."
+              onCreateDocument={handleCreateDocument}
               onExportClick={handleOpenExportModal}
             />
 
-            <IncidentFiltersPanel
+            <DocumentFiltersPanel
               searchValue={searchTerm}
               onSearchChange={handleSearchInputChange}
               onSearchBlur={handleSearchInputBlur}
@@ -481,8 +483,8 @@ export default function EmployeeDashboard() {
               onStatusChange={handleStatusChange}
             />
 
-            <EmployeeIncidentsTable
-              incidents={incidents}
+            <EmployeeDocumentsTable
+              documents={documents}
               totalCount={totalCount}
               isLoading={isLoading}
               hasLoaded={hasLoaded}
@@ -494,21 +496,21 @@ export default function EmployeeDashboard() {
               onPageChange={handlePageChange}
               pageSize={currentPageSize}
               formatDate={formatDate}
-              onNavigateToIncident={handleNavigateToIncident}
+              onNavigateToDocument={handleNavigateToDocument}
             />
           </div>
           <Footer router={router} showPanelButton={false} />
         </div>
       </div>
 
-      <ExportIncidentsModal
+      <ExportDocumentsModal
         isOpen={isExportModalOpen}
         onClose={handleCloseExportModal}
         onConfirm={handleConfirmExport}
         isExporting={isExporting}
         totalCount={totalCount}
         recordLabel={recordLabel}
-        hasIncidentsToExport={hasIncidentsToExport}
+        hasDocumentsToExport={hasDocumentsToExport}
       />
     </>
   );

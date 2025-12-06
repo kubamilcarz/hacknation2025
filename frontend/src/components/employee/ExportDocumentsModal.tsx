@@ -3,12 +3,12 @@
 import { useMemo, useState } from "react";
 import Modal from "@/components/Modal";
 import {
-  incidentService,
-  type IncidentExportFormat,
-} from "@/lib/services/incidentService";
+  documentService,
+  type DocumentExportFormat,
+} from "@/lib/services/documentService";
 
 const FORMAT_OPTIONS: Array<{
-  value: IncidentExportFormat;
+  value: DocumentExportFormat;
   label: string;
   helper: string;
 }> = [
@@ -34,26 +34,26 @@ const FORMAT_OPTIONS: Array<{
   },
 ];
 
-type ExportIncidentsModalProps = {
+type ExportDocumentsModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   isExporting: boolean;
   totalCount: number;
   recordLabel: string;
-  hasIncidentsToExport: boolean;
+  hasDocumentsToExport: boolean;
 };
 
-export default function ExportIncidentsModal({
+export default function ExportDocumentsModal({
   isOpen,
   onClose,
   onConfirm,
   isExporting,
   totalCount,
   recordLabel,
-  hasIncidentsToExport,
-}: ExportIncidentsModalProps) {
-  const [selectedFormat, setSelectedFormat] = useState<IncidentExportFormat>("csv");
+  hasDocumentsToExport,
+}: ExportDocumentsModalProps) {
+  const [selectedFormat, setSelectedFormat] = useState<DocumentExportFormat>("csv");
 
   const confirmLabel = useMemo(() => {
     switch (selectedFormat) {
@@ -69,7 +69,7 @@ export default function ExportIncidentsModal({
   }, [selectedFormat]);
 
   const handleConfirm = () => {
-    incidentService.setExportFormat(selectedFormat);
+    documentService.setExportFormat(selectedFormat);
     onConfirm();
     setSelectedFormat("csv");
   };
@@ -83,7 +83,7 @@ export default function ExportIncidentsModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Eksportuj listę zgłoszeń"
+      title="Eksportuj listę dokumentów"
       description={`Obecny widok zawiera ${totalCount} ${recordLabel}. Eksport obejmie aktywne filtry i sortowanie.`}
     >
       <div className="space-y-6">
@@ -95,9 +95,9 @@ export default function ExportIncidentsModal({
           <p className="mt-3">
             Plik CSV zachowa aktualne kryteria wyszukiwania, statusy i bieżące ustawienia sortowania.
           </p>
-          {!hasIncidentsToExport && (
+          {!hasDocumentsToExport && (
             <p className="mt-3 font-medium text-(--color-error)">
-              Brak zgłoszeń spełniających bieżące kryteria.
+              Brak dokumentów spełniających bieżące kryteria.
             </p>
           )}
         </div>
@@ -182,8 +182,8 @@ export default function ExportIncidentsModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!hasIncidentsToExport || isExporting}
-            className={`inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold text-(--color-accent-text) transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${!hasIncidentsToExport || isExporting ? "bg-(--color-border) text-muted" : "bg-(--color-accent) hover:bg-(--color-accent-strong)"}`}
+            disabled={!hasDocumentsToExport || isExporting}
+            className={`inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold text-(--color-accent-text) transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${!hasDocumentsToExport || isExporting ? "bg-(--color-border) text-muted" : "bg-(--color-accent) hover:bg-(--color-accent-strong)"}`}
           >
             {isExporting ? "Przygotowuję plik…" : confirmLabel}
           </button>

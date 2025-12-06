@@ -2,37 +2,37 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useIncidents } from '@/context/IncidentContext';
-import { incidentService } from '@/lib/services/incidentService';
-import { type Incident, type IncidentPriority, type IncidentStatus } from '@/types/incident';
+import { useDocuments } from '@/context/DocumentContext';
+import { documentService } from '@/lib/services/documentService';
+import { type CaseDocument, type DocumentPriority, type DocumentStatus } from '@/types/case-document';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 
-const statusLabels: Record<IncidentStatus, string> = {
+const statusLabels: Record<DocumentStatus, string> = {
   pending: 'Oczekujące',
   'in-progress': 'W trakcie',
   resolved: 'Rozwiązane',
   rejected: 'Odrzucone',
 };
 
-const priorityLabels: Record<IncidentPriority, string> = {
+const priorityLabels: Record<DocumentPriority, string> = {
   low: 'Niski',
   medium: 'Średni',
   high: 'Wysoki',
   critical: 'Krytyczny',
 };
 
-interface IncidentDetailPageProps {
+interface DocumentDetailPageProps {
   params: { id: string };
 }
 
-export default function IncidentDetail({ params }: IncidentDetailPageProps) {
+export default function DocumentDetail({ params }: DocumentDetailPageProps) {
   const router = useRouter();
-  const { isLoading, updateIncident, getIncidentById } = useIncidents();
+  const { isLoading, updateDocument, getDocumentById } = useDocuments();
 
-  const incidentFromStore = useMemo(() => getIncidentById(params.id), [getIncidentById, params.id]);
+  const documentFromStore = useMemo(() => getDocumentById(params.id), [getDocumentById, params.id]);
 
-  const [incident, setIncident] = useState<Incident | null>(incidentFromStore ?? null);
-  const [status, setStatus] = useState<IncidentStatus>('pending');
+  const [documentData, setDocumentData] = useState<CaseDocument | null>(documentFromStore ?? null);
+  const [status, setStatus] = useState<DocumentStatus>('pending');
   const [assignedTo, setAssignedTo] = useState('');
   const [notes, setNotes] = useState('');
   const [saved, setSaved] = useState(false);
@@ -40,31 +40,31 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (incidentFromStore) {
-      setIncident(incidentFromStore);
-      setStatus(incidentFromStore.status);
-      setAssignedTo(incidentFromStore.assignedTo ?? '');
-      setNotes(incidentFromStore.notes ?? '');
+    if (documentFromStore) {
+      setDocumentData(documentFromStore);
+      setStatus(documentFromStore.status);
+      setAssignedTo(documentFromStore.assignedTo ?? '');
+      setNotes(documentFromStore.notes ?? '');
       setError(null);
     }
-  }, [incidentFromStore]);
+  }, [documentFromStore]);
 
   useEffect(() => {
-    if (incidentFromStore || isLoading) {
+    if (documentFromStore || isLoading) {
       return;
     }
 
     let isCancelled = false;
 
-    const fetchIncident = async () => {
+    const fetchDocument = async () => {
       try {
-        const remote = await incidentService.getById(params.id);
+        const remote = await documentService.getById(params.id);
         if (isCancelled) {
           return;
         }
 
         if (remote) {
-          setIncident(remote);
+          setDocumentData(remote);
           setStatus(remote.status);
           setAssignedTo(remote.assignedTo ?? '');
           setNotes(remote.notes ?? '');
@@ -72,45 +72,45 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
           return;
         }
 
-        setError('Nie znaleziono zgłoszenia.');
+        setError('Nie znaleziono dokumentu.');
       } catch {
         if (!isCancelled) {
-          setError('Nie udało się pobrać zgłoszenia.');
+          setError('Nie udało się pobrać dokumentu.');
         }
       }
     };
 
-    void fetchIncident();
+    void fetchDocument();
 
     return () => {
       isCancelled = true;
     };
-  }, [incidentFromStore, isLoading, params.id]);
+  }, [documentFromStore, isLoading, params.id]);
 
   const breadcrumbItems = useMemo(() => {
-    if (incident) {
+    if (documentData) {
       return [
         { href: '/dashboard/employee', labelKey: 'panel' },
-        { label: `Zgłoszenie ${incident.caseNumber}` },
+        { label: `Dokument ${documentData.caseNumber}` },
       ];
     }
 
     return [
       { href: '/dashboard/employee', labelKey: 'panel' },
-      { labelKey: 'report' },
+      { label: 'Dokument' },
     ];
-  }, [incident]);
+  }, [documentData]);
 
   const handleSave = async () => {
-    if (!incident) {
+    if (!documentData) {
       return;
     }
 
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateIncident(incident.id, { status, assignedTo, notes });
-      setIncident(updated);
+      const updated = await updateDocument(documentData.documentId, { status, assignedTo, notes });
+      setDocumentData(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -120,9 +120,9 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
     }
   };
 
-  const getStatusBadge = (value: IncidentStatus) => {
+  const getStatusBadge = (value: DocumentStatus) => {
     const base = 'inline-flex items-center rounded-full px-3 py-1 text-sm font-medium';
-    const palette: Record<IncidentStatus, string> = {
+    const palette: Record<DocumentStatus, string> = {
       pending: 'bg-(--color-warning-soft) text-(--color-warning)',
       'in-progress': 'bg-(--color-info-soft) text-(--color-info)',
       resolved: 'bg-(--color-success-soft) text-(--color-success)',
@@ -131,9 +131,9 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
     return <span className={`${base} ${palette[value]}`}>{statusLabels[value]}</span>;
   };
 
-  const getPriorityBadge = (value: IncidentPriority) => {
+  const getPriorityBadge = (value: DocumentPriority) => {
     const base = 'inline-flex items-center rounded-full px-3 py-1 text-sm font-medium';
-    const palette: Record<IncidentPriority, string> = {
+    const palette: Record<DocumentPriority, string> = {
       low: 'bg-(--color-support-soft) text-(--color-support)',
       medium: 'bg-(--color-info-soft) text-(--color-info)',
       high: 'bg-(--color-warning-soft) text-(--color-warning)',
@@ -159,9 +159,9 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
             <Breadcrumbs items={breadcrumbItems} />
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold text-primary">
-                {incident ? `Zgłoszenie ${incident.caseNumber}` : 'Zgłoszenie'}
+                {documentData ? `Dokument ${documentData.caseNumber}` : 'Dokument'}
               </h1>
-              {incident && getStatusBadge(incident.status)}
+              {documentData && getStatusBadge(documentData.status)}
             </div>
           </div>
 
@@ -177,45 +177,68 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
             </div>
           )}
 
-          {(!incident && isLoading) && (
+          {(!documentData && isLoading) && (
             <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-6 text-sm text-muted">
-              Ładowanie szczegółów zgłoszenia…
+              Ładowanie dokumentu…
             </div>
           )}
 
-          {incident && (
+          {documentData && (
             <div className="space-y-8">
               <section className="border-b border-subtle pb-6">
                 <h2 className="text-lg font-semibold text-primary">Informacje podstawowe</h2>
                 <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted">Numer sprawy</p>
-                    <p className="mt-1 text-base font-medium text-primary">{incident.caseNumber}</p>
+                    <p className="mt-1 text-base font-medium text-primary">{documentData.caseNumber}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Tytuł</p>
-                    <p className="mt-1 text-base font-medium text-primary">{incident.title}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Poszkodowany</p>
+                    <p className="mt-1 text-base font-medium text-primary">{`${documentData.imie} ${documentData.nazwisko}`.trim()}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Kategoria</p>
-                    <p className="mt-1 text-base font-medium text-primary">{incident.category}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">PESEL</p>
+                    <p className="mt-1 text-base font-medium text-primary">{documentData.pesel ?? 'Brak danych'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Data i godzina wypadku</p>
+                    <p className="mt-1 text-base font-medium text-primary">
+                      {formatDate(new Date(documentData.data_wypadku))} • {documentData.godzina_wypadku}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Miejsce wypadku</p>
+                    <p className="mt-1 text-base font-medium text-primary">{documentData.miejsce_wypadku}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted">Priorytet</p>
-                    <div className="mt-2">{getPriorityBadge(incident.priority)}</div>
+                    <div className="mt-2">{getPriorityBadge(documentData.priority)}</div>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Data utworzenia</p>
-                    <p className="mt-1 text-base font-medium text-primary">{formatDate(incident.createdAt)}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Wypadek przy maszynie</p>
+                    <p className="mt-1 text-base font-medium text-primary">
+                      {documentData.czy_wypadek_podczas_uzywania_maszyny ? 'Tak' : 'Nie'}
+                    </p>
                   </div>
                 </div>
               </section>
 
               <section className="border-b border-subtle pb-6">
                 <h2 className="text-lg font-semibold text-primary">Opis zdarzenia</h2>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-secondary">
-                  {incident.description}
-                </p>
+                <div className="mt-4 space-y-3 text-sm text-secondary">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Rodzaj urazu</p>
+                    <p className="mt-1 whitespace-pre-wrap text-base font-medium text-primary">
+                      {documentData.rodzaj_urazow}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Okoliczności</p>
+                    <p className="mt-1 whitespace-pre-wrap leading-relaxed text-secondary">
+                      {documentData.szczegoly_okolicznosci}
+                    </p>
+                  </div>
+                </div>
               </section>
 
               <section className="border-b border-subtle pb-6">
@@ -223,26 +246,45 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
                 <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted">Imię i nazwisko</p>
-                    <p className="mt-1 text-base font-medium text-primary">{incident.reporterName}</p>
+                    <p className="mt-1 text-base font-medium text-primary">
+                      {`${documentData.imie_zglaszajacego ?? ''} ${documentData.nazwisko_zglaszajacego ?? ''}`.trim() || 'Brak danych'}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Email</p>
-                    <p className="mt-1 text-base font-medium text-primary">{incident.reporterEmail}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Telefon</p>
+                    <p className="mt-1 text-base font-medium text-primary">{documentData.nr_telefonu_zglaszajacego ?? 'Brak danych'}</p>
                   </div>
-                  {incident.reporterPhone && (
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted">Telefon</p>
-                      <p className="mt-1 text-base font-medium text-primary">{incident.reporterPhone}</p>
-                    </div>
-                  )}
-                  {incident.pesel && (
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted">PESEL</p>
-                      <p className="mt-1 text-base font-medium text-primary">{incident.pesel}</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">PESEL zgłaszającego</p>
+                    <p className="mt-1 text-base font-medium text-primary">{documentData.pesel_zglaszajacego ?? 'Brak danych'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted">Adres</p>
+                    <p className="mt-1 text-base font-medium text-primary">
+                      {[documentData.ulica_zglaszajacego, documentData.nr_domu_zglaszajacego, documentData.nr_lokalu_zglaszajacego]
+                        .filter(Boolean)
+                        .join(' ')}
+                      , {documentData.kod_pocztowy_zglaszajacego ?? ''} {documentData.miejscowosc_zglaszajacego ?? ''}
+                    </p>
+                  </div>
                 </div>
               </section>
+
+              {documentData.witnesses && documentData.witnesses.length > 0 && (
+                <section className="border-b border-subtle pb-6">
+                  <h2 className="text-lg font-semibold text-primary">Świadkowie</h2>
+                  <div className="mt-4 space-y-4">
+                    {documentData.witnesses.map((witness, index) => (
+                      <div key={`${witness.imie}-${witness.nazwisko}-${index}`} className="rounded-lg border border-subtle p-4">
+                        <p className="text-base font-medium text-primary">{`${witness.imie} ${witness.nazwisko}`}</p>
+                        <p className="text-sm text-secondary">
+                          {[witness.ulica, witness.nr_domu, witness.nr_lokalu].filter(Boolean).join(' ')}, {witness.kod_pocztowy} {witness.miejscowosc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <section className="border-b border-subtle pb-6">
                 <h2 className="text-lg font-semibold text-primary">Obsługa sprawy</h2>
@@ -254,7 +296,7 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
                     <select
                       id="status"
                       value={status}
-                      onChange={(event) => setStatus(event.target.value as IncidentStatus)}
+                      onChange={(event) => setStatus(event.target.value as DocumentStatus)}
                       className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                     >
                       <option value="pending">Oczekujące</option>
@@ -272,7 +314,7 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
                       id="assignedTo"
                       value={assignedTo}
                       onChange={(event) => setAssignedTo(event.target.value)}
-                      placeholder="Imię i nazwisko pracownika"
+                      placeholder="Imię i nazwisko analityka"
                       className="w-full rounded-md border border-subtle bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                     />
                   </div>
@@ -287,7 +329,7 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
                       onChange={(event) => setNotes(event.target.value)}
                       rows={6}
                       className="w-full rounded-md border border-subtle bg-input px-4 py-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-                      placeholder="Dodaj ważne ustalenia, np. oczekiwane dokumenty lub kontakt telefoniczny."
+                      placeholder="Dodaj ważne ustalenia, np. wymagane dokumenty lub kontakt telefoniczny."
                     />
                   </div>
                 </div>
@@ -299,16 +341,16 @@ export default function IncidentDetail({ params }: IncidentDetailPageProps) {
                   <div className="flex items-start gap-3">
                     <span className="mt-1 h-2 w-2 rounded-full bg-(--color-accent)"></span>
                     <div>
-                      <p className="text-sm font-medium text-primary">Zgłoszenie utworzone</p>
-                      <p className="text-xs text-muted">{formatDate(incident.createdAt)}</p>
+                      <p className="text-sm font-medium text-primary">Dokument utworzony</p>
+                      <p className="text-xs text-muted">{formatDate(documentData.createdAt)}</p>
                     </div>
                   </div>
-                  {incident.updatedAt.getTime() !== incident.createdAt.getTime() && (
+                  {documentData.updatedAt.getTime() !== documentData.createdAt.getTime() && (
                     <div className="flex items-start gap-3">
                       <span className="mt-1 h-2 w-2 rounded-full bg-(--color-accent)"></span>
                       <div>
                         <p className="text-sm font-medium text-primary">Ostatnia aktualizacja</p>
-                        <p className="text-xs text-muted">{formatDate(incident.updatedAt)}</p>
+                        <p className="text-xs text-muted">{formatDate(documentData.updatedAt)}</p>
                       </div>
                     </div>
                   )}

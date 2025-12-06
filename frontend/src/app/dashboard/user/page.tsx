@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useIncidents } from '@/context/IncidentContext';
+import { useDocuments } from '@/context/DocumentContext';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
-import { type CreateIncidentInput, type IncidentPriority } from '@/types/incident';
+import { type CreateDocumentInput, type DocumentPriority } from '@/types/case-document';
 
 const categories = [
   'Zasiłki',
@@ -15,16 +15,16 @@ const categories = [
   'Inne',
 ];
 
-const priorities: { value: IncidentPriority; label: string }[] = [
+const priorities: { value: DocumentPriority; label: string }[] = [
   { value: 'low', label: 'Niski' },
   { value: 'medium', label: 'Średni' },
   { value: 'high', label: 'Wysoki' },
   { value: 'critical', label: 'Krytyczny' },
 ];
 
-type IncidentFormState = CreateIncidentInput;
+type DocumentFormState = CreateDocumentInput;
 
-const initialFormState: IncidentFormState = {
+const initialFormState: DocumentFormState = {
   title: '',
   description: '',
   category: categories[0],
@@ -37,9 +37,9 @@ const initialFormState: IncidentFormState = {
 
 export default function UserDashboard() {
   const router = useRouter();
-  const { createIncident } = useIncidents();
+  const { createDocument } = useDocuments();
 
-  const [formData, setFormData] = useState<IncidentFormState>(initialFormState);
+  const [formData, setFormData] = useState<DocumentFormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [caseNumber, setCaseNumber] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export default function UserDashboard() {
     setSubmissionError(null);
 
     try {
-      const created = await createIncident(formData);
+      const created = await createDocument(formData);
       setCaseNumber(created.caseNumber);
       setFormData(initialFormState);
     } catch (err) {
@@ -94,7 +94,7 @@ export default function UserDashboard() {
 
           {caseNumber && (
             <div className="mb-6 rounded-lg border border-(--color-accent-strong) bg-(--color-accent-soft) px-4 py-3 text-sm text-accent">
-              Zgłoszenie przyjęte. Tymczasowy numer sprawy: <span className="font-semibold">{caseNumber}</span>. Kopię wyślemy na
+              Dokument przyjęty. Tymczasowy numer sprawy: <span className="font-semibold">{caseNumber}</span>. Kopię wyślemy na
               adres e-mail po podłączeniu systemu produkcyjnego.
             </div>
           )}

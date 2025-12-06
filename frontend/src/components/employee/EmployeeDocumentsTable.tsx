@@ -1,20 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Pagination } from "@/components/Pagination";
 import { Spinner } from "@/components/Spinner";
-import type { Incident } from "@/types/incident";
-import type { IncidentListOptions } from "@/lib/services/incidentService";
-import { INCIDENT_PRIORITY_LABELS, INCIDENT_STATUS_LABELS } from "@/lib/constants/incidents";
+import type { CaseDocument } from "@/types/case-document";
+import type { DocumentListOptions } from "@/lib/services/documentService";
+import { DOCUMENT_PRIORITY_LABELS, DOCUMENT_STATUS_LABELS } from "@/lib/constants/documents";
 
 const MIN_COLUMN_WIDTH = 140;
-const TEXT_COLUMN_IDS = new Set(["caseNumber", "title", "reporterName", "category"]);
+const TEXT_COLUMN_IDS = new Set(["caseNumber", "injured", "miejsce_wypadku", "rodzaj_urazow"]);
 
 type ColumnDefinition = {
   id: string;
   label: string;
   minWidth?: number;
-  render: (incident: Incident) => ReactNode;
+  render: (document: CaseDocument) => ReactNode;
   cellClassName?: string;
   align?: "left" | "right";
   sortable?: boolean;
@@ -24,16 +24,16 @@ type ColumnDefinition = {
   width?: number;
 };
 
-export type SortConfig = { columnId: IncidentListOptions["sort"]; direction: "asc" | "desc" } | null;
+export type SortConfig = { columnId: DocumentListOptions["sort"]; direction: "asc" | "desc" } | null;
 
-const SORTABLE_COLUMNS: Array<{ id: IncidentListOptions["sort"]; defaultDirection: "asc" | "desc" }> = [
+const SORTABLE_COLUMNS: Array<{ id: DocumentListOptions["sort"]; defaultDirection: "asc" | "desc" }> = [
+  { id: "data_wypadku", defaultDirection: "desc" },
   { id: "caseNumber", defaultDirection: "asc" },
-  { id: "title", defaultDirection: "asc" },
+  { id: "injuredName", defaultDirection: "asc" },
   { id: "reporterName", defaultDirection: "asc" },
-  { id: "category", defaultDirection: "asc" },
+  { id: "miejsce_wypadku", defaultDirection: "asc" },
   { id: "priority", defaultDirection: "asc" },
   { id: "status", defaultDirection: "asc" },
-  { id: "createdAt", defaultDirection: "desc" },
 ];
 
 const SORTABLE_COLUMN_MAP = SORTABLE_COLUMNS.reduce<Record<string, { defaultDirection: "asc" | "desc" }>>(
@@ -52,32 +52,32 @@ export function getEmployeeDefaultSortConfig(): SortConfig {
   return { columnId: defaultColumn.id, direction: defaultColumn.defaultDirection };
 }
 
-export function isEmployeeSortableColumn(columnId: string | null): columnId is IncidentListOptions["sort"] {
+export function isEmployeeSortableColumn(columnId: string | null): columnId is DocumentListOptions["sort"] {
   return Boolean(columnId && SORTABLE_COLUMN_MAP[columnId]);
 }
 
-export function getEmployeeColumnDefaultDirection(columnId: IncidentListOptions["sort"]): "asc" | "desc" {
+export function getEmployeeColumnDefaultDirection(columnId: DocumentListOptions["sort"]): "asc" | "desc" {
   return SORTABLE_COLUMN_MAP[columnId]?.defaultDirection ?? "asc";
 }
 
-type EmployeeIncidentsTableProps = {
-  incidents: Incident[];
+type EmployeeDocumentsTableProps = {
+  documents: CaseDocument[];
   totalCount: number;
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
   sortConfig: SortConfig;
-  onSortChange: (columnId: IncidentListOptions["sort"], direction: "asc" | "desc") => void;
+  onSortChange: (columnId: DocumentListOptions["sort"], direction: "asc" | "desc") => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   pageSize: number;
   formatDate: (input: Date) => string;
-  onNavigateToIncident: (incidentId: string) => void;
+  onNavigateToDocument: (documentId: string) => void;
 };
 
-export default function EmployeeIncidentsTable({
-  incidents,
+export default function EmployeeDocumentsTable({
+  documents,
   totalCount,
   isLoading,
   hasLoaded,
@@ -89,55 +89,64 @@ export default function EmployeeIncidentsTable({
   onPageChange,
   pageSize,
   formatDate,
-  onNavigateToIncident,
-}: EmployeeIncidentsTableProps) {
+  onNavigateToDocument,
+}: EmployeeDocumentsTableProps) {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
     ({
+      detailsToggle: 48,
       caseNumber: 160,
-      title: 220,
-      reporterName: 190,
-      category: 170,
+      injured: 220,
+      miejsce_wypadku: 220,
+      rodzaj_urazow: 220,
+      data_wypadku: 150,
       priority: 150,
       status: 150,
-      createdAt: 150,
       actions: 124,
     }) satisfies Record<string, number>
   );
   const [isResizing, setIsResizing] = useState(false);
   const resizeStylesRef = useRef<{ userSelect: string; cursor: string } | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const getStatusBadge = useCallback((status: Incident["status"]) => {
+  const getStatusBadge = useCallback((status: CaseDocument["status"]) => {
     const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium";
-    const styles: Record<Incident["status"], string> = {
+    const styles: Record<CaseDocument["status"], string> = {
       pending: "bg-(--color-warning-soft) text-(--color-warning)",
       "in-progress": "bg-(--color-info-soft) text-(--color-info)",
       resolved: "bg-(--color-success-soft) text-(--color-success)",
       rejected: "bg-(--color-error-soft) text-(--color-error)",
     };
 
-    return <span className={`${base} ${styles[status]}`}>{INCIDENT_STATUS_LABELS[status]}</span>;
+    return <span className={`${base} ${styles[status]}`}>{DOCUMENT_STATUS_LABELS[status]}</span>;
   }, []);
 
-  const getPriorityBadge = useCallback((priority: Incident["priority"]) => {
+  const getPriorityBadge = useCallback((priority: CaseDocument["priority"]) => {
     const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium";
-    const styles: Record<Incident["priority"], string> = {
+    const styles: Record<CaseDocument["priority"], string> = {
       low: "bg-(--color-support-soft) text-(--color-support)",
       medium: "bg-(--color-info-soft) text-(--color-info)",
       high: "bg-(--color-warning-soft) text-(--color-warning)",
       critical: "bg-(--color-error-soft) text-(--color-error)",
     };
 
-    return <span className={`${base} ${styles[priority]}`}>{INCIDENT_PRIORITY_LABELS[priority]}</span>;
+    return <span className={`${base} ${styles[priority]}`}>{DOCUMENT_PRIORITY_LABELS[priority]}</span>;
   }, []);
 
   const closeActionMenu = useCallback(() => {
     setOpenActionMenuId(null);
   }, []);
 
-  const toggleActionMenu = useCallback((incidentId: string) => {
-    setOpenActionMenuId((current) => (current === incidentId ? null : incidentId));
+  const toggleActionMenu = useCallback((documentId: string) => {
+    setOpenActionMenuId((current) => (current === documentId ? null : documentId));
+  }, []);
+
+  const toggleRowExpansion = useCallback((documentId: string) => {
+    setExpandedRows((current) => ({
+      ...current,
+      [documentId]: !current[documentId],
+    }));
   }, []);
 
   useEffect(() => {
@@ -172,27 +181,27 @@ export default function EmployeeIncidentsTable({
   }, [openActionMenuId]);
 
   const renderActionsCell = useCallback(
-    (incident: Incident) => {
-      const isOpen = openActionMenuId === incident.id;
+    (documentRow: CaseDocument) => {
+      const isOpen = openActionMenuId === documentRow.documentId;
 
       return (
         <div
           ref={(node) => {
             if (node) {
-              actionMenuRefs.current[incident.id] = node;
+              actionMenuRefs.current[documentRow.documentId] = node;
             } else {
-              delete actionMenuRefs.current[incident.id];
+              delete actionMenuRefs.current[documentRow.documentId];
             }
           }}
           className="relative flex items-center justify-end gap-2"
         >
           <button
             type="button"
-            onClick={() => toggleActionMenu(incident.id)}
+            onClick={() => toggleActionMenu(documentRow.documentId)}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-subtle text-muted transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
             aria-haspopup="menu"
             aria-expanded={isOpen}
-            aria-label={`Dostępne działania dla zgłoszenia ${incident.caseNumber}`}
+            aria-label={`Dostępne działania dla dokumentu ${documentRow.caseNumber}`}
           >
             <svg
               className="h-5 w-5"
@@ -212,11 +221,11 @@ export default function EmployeeIncidentsTable({
           <button
             type="button"
             onClick={() => {
-              onNavigateToIncident(incident.id);
+              onNavigateToDocument(documentRow.documentId);
               closeActionMenu();
             }}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-transparent bg-(--color-accent-soft) text-(--color-accent) transition hover:bg-(--color-accent) hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-            aria-label={`Przejdź do szczegółów zgłoszenia ${incident.caseNumber}`}
+            aria-label={`Przejdź do dokumentu ${documentRow.caseNumber}`}
           >
             <svg
               className="h-4 w-4"
@@ -241,7 +250,7 @@ export default function EmployeeIncidentsTable({
                 className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-secondary transition hover:bg-(--color-surface-subdued) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring)"
               >
                 <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-(--color-success)" aria-hidden="true" />
-                Oznacz jako rozwiązane
+                Oznacz jako rozpatrzony
               </button>
               <button
                 type="button"
@@ -249,7 +258,7 @@ export default function EmployeeIncidentsTable({
                 className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-secondary transition hover:bg-(--color-surface-subdued) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring)"
               >
                 <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-(--color-warning)" aria-hidden="true" />
-                Przypisz pracownika
+                Przypisz analityka
               </button>
               <button
                 type="button"
@@ -264,7 +273,7 @@ export default function EmployeeIncidentsTable({
         </div>
       );
     },
-    [closeActionMenu, onNavigateToIncident, openActionMenuId, toggleActionMenu]
+    [closeActionMenu, onNavigateToDocument, openActionMenuId, toggleActionMenu]
   );
 
   const columns = useMemo<ColumnDefinition[]>(
@@ -274,43 +283,52 @@ export default function EmployeeIncidentsTable({
         label: "Numer sprawy",
         minWidth: 160,
         cellClassName: "font-semibold text-secondary",
-        render: (incident) => <span className="block truncate">{incident.caseNumber}</span>,
+        render: (documentRow) => <span className="block truncate">{documentRow.caseNumber}</span>,
         sortable: true,
         defaultSortDirection: "asc",
         sticky: "left",
       },
       {
-        id: "title",
-        label: "Tytuł",
+        id: "injured",
+        label: "Poszkodowany",
         minWidth: 220,
         cellClassName: "text-primary",
-        render: (incident) => <span className="block truncate">{incident.title}</span>,
+        render: (documentRow) => <span className="block truncate">{`${documentRow.imie} ${documentRow.nazwisko}`.trim()}</span>,
         sortable: true,
         defaultSortDirection: "asc",
       },
       {
-        id: "reporterName",
-        label: "Zgłaszający",
-        minWidth: 190,
+        id: "miejsce_wypadku",
+        label: "Miejsce wypadku",
+        minWidth: 220,
         cellClassName: "text-secondary",
-        render: (incident) => <span className="block truncate">{incident.reporterName}</span>,
+        render: (documentRow) => <span className="block truncate">{documentRow.miejsce_wypadku}</span>,
         sortable: true,
         defaultSortDirection: "asc",
       },
       {
-        id: "category",
-        label: "Kategoria",
-        minWidth: 170,
+        id: "rodzaj_urazow",
+        label: "Rodzaj urazu",
+        minWidth: 220,
         cellClassName: "text-secondary",
-        render: (incident) => <span className="block truncate">{incident.category}</span>,
+        render: (documentRow) => <span className="block truncate">{documentRow.rodzaj_urazow}</span>,
         sortable: true,
         defaultSortDirection: "asc",
+      },
+      {
+        id: "data_wypadku",
+        label: "Data wypadku",
+        minWidth: 150,
+        cellClassName: "text-secondary",
+        render: (documentRow) => formatDate(new Date(documentRow.data_wypadku)),
+        sortable: true,
+        defaultSortDirection: "desc",
       },
       {
         id: "priority",
         label: "Priorytet",
         minWidth: 150,
-        render: (incident) => getPriorityBadge(incident.priority),
+        render: (documentRow) => getPriorityBadge(documentRow.priority),
         sortable: true,
         defaultSortDirection: "asc",
       },
@@ -318,18 +336,9 @@ export default function EmployeeIncidentsTable({
         id: "status",
         label: "Status",
         minWidth: 150,
-        render: (incident) => getStatusBadge(incident.status),
+        render: (documentRow) => getStatusBadge(documentRow.status),
         sortable: true,
         defaultSortDirection: "asc",
-      },
-      {
-        id: "createdAt",
-        label: "Data",
-        minWidth: 150,
-        cellClassName: "text-secondary",
-        render: (incident) => formatDate(incident.createdAt),
-        sortable: true,
-        defaultSortDirection: "desc",
       },
       {
         id: "actions",
@@ -452,7 +461,7 @@ export default function EmployeeIncidentsTable({
         return;
       }
 
-      const columnId = column.id as IncidentListOptions["sort"];
+      const columnId = column.id as DocumentListOptions["sort"];
       const defaultDirection = column.defaultSortDirection ?? "asc";
       const isSameColumn = sortConfig?.columnId === columnId;
       const nextDirection = isSameColumn
@@ -476,13 +485,13 @@ export default function EmployeeIncidentsTable({
   const hasResults = totalCount > 0;
   const showEmptyState = hasLoaded && !isLoading && totalCount === 0;
   const isFallbackState = showLoadingState || showEmptyState;
-  const shouldReserveLoadingSpace = isInitialLoad || (isRefetching && incidents.length === 0);
+  const shouldReserveLoadingSpace = isInitialLoad || (isRefetching && documents.length === 0);
   const tableContainerClassName = `relative rounded-lg border border-subtle${
     shouldReserveLoadingSpace ? " min-h-[12rem]" : ""
   }`;
   const firstItemIndex = (currentPage - 1) * pageSize;
   const displayRangeStart = hasResults ? firstItemIndex + 1 : 0;
-  const displayRangeEnd = hasResults ? Math.min(totalCount, firstItemIndex + incidents.length) : 0;
+  const displayRangeEnd = hasResults ? Math.min(totalCount, firstItemIndex + documents.length) : 0;
 
   const summaryMessage = (() => {
     if (error) {
@@ -497,7 +506,7 @@ export default function EmployeeIncidentsTable({
     if (totalCount === 0) {
       return null;
     }
-    return `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalCount} zgłoszeń (łącznie ${incidents.length})`;
+    return `Wyświetlono ${displayRangeStart}-${displayRangeEnd} z ${totalCount} dokumentów (łącznie ${documents.length})`;
   })();
 
   return (
@@ -611,8 +620,8 @@ export default function EmployeeIncidentsTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle bg-surface">
-              {incidents.map((incident) => (
-                <tr key={incident.id} className="transition hover:bg-surface-subdued">
+              {documents.map((documentRow) => (
+                <tr key={documentRow.documentId} className="transition hover:bg-surface-subdued">
                   {columns.map((column) => {
                     const width = isFallbackState ? undefined : getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
                     const stickyClassName =
@@ -624,7 +633,7 @@ export default function EmployeeIncidentsTable({
                     const isTextColumn = TEXT_COLUMN_IDS.has(column.id);
                     const alignmentClass = column.align === "right" ? "text-right" : "text-left";
                     const isActionsColumn = column.id === "actions";
-                    const isMenuOpenForRow = isActionsColumn && openActionMenuId === incident.id;
+                    const isMenuOpenForRow = isActionsColumn && openActionMenuId === documentRow.documentId;
                     const baseZIndex = column.sticky ? 5 : undefined;
                     const cellZIndex = isMenuOpenForRow ? 80 : baseZIndex;
                     const fallbackVisibilityClass =
@@ -641,13 +650,13 @@ export default function EmployeeIncidentsTable({
                     }
                     return (
                       <td
-                        key={`${incident.id}-${column.id}`}
+                        key={`${documentRow.documentId}-${column.id}`}
                         className={`px-3 py-3 ${alignmentClass} ${stickyClassName} ${fallbackVisibilityClass} ${column.cellClassName ?? ""} ${
                           isTextColumn ? "overflow-hidden whitespace-nowrap" : ""
                         }`.trim()}
                         style={cellStyle}
                       >
-                        {column.render(incident)}
+                        {column.render(documentRow)}
                       </td>
                     );
                   })}
@@ -669,7 +678,7 @@ export default function EmployeeIncidentsTable({
                       ) : error ? (
                         <span className="text-sm text-error">{error}</span>
                       ) : (
-                        "Brak zgłoszeń spełniających kryteria wyszukiwania."
+                        "Brak dokumentów spełniających kryteria wyszukiwania."
                       )}
                     </div>
                   </td>

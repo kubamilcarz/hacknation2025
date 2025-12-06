@@ -1,7 +1,7 @@
 "use client";
 
 import { AccessibilityProvider } from "../context/AccessibilityContext";
-import { IncidentProvider } from "../context/IncidentContext";
+import { DocumentProvider } from "../context/DocumentContext";
 import { SessionProvider } from "../context/SessionContext";
 import { ThemeController } from "../theme/ThemeController";
 
@@ -10,7 +10,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <AccessibilityProvider>
       <ThemeController />
       <SessionProvider>
-        <IncidentProvider>{children}</IncidentProvider>
+        <DocumentProvider>{children}</DocumentProvider>
       </SessionProvider>
     </AccessibilityProvider>
   );

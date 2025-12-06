@@ -1,105 +1,77 @@
-import { mockIncidents } from "../mock-data";
+import { mockDocuments, defaultDocumentData } from "../mock-documents";
 import {
-  type CreateIncidentInput,
-  type Incident,
-  type IncidentStatus,
-  type UpdateIncidentInput,
-} from "@/types/incident";
+  type CaseDocument,
+  type CreateDocumentInput,
+  type DocumentStatus,
+  type UpdateDocumentInput,
+} from "@/types/case-document";
+import {
+  DOCUMENT_PRIORITY_LABELS,
+  DOCUMENT_PRIORITY_RANK,
+  DOCUMENT_STATUS_LABELS,
+  DOCUMENT_STATUS_RANK,
+} from "@/lib/constants/documents";
 
-export type IncidentExportFormat = "csv" | "excel" | "json" | "pdf";
+export type DocumentExportFormat = "csv" | "excel" | "json" | "pdf";
 
-const INCIDENT_PRIORITY_LABELS: Record<Incident["priority"], string> = {
-  low: "Niski",
-  medium: "Średni",
-  high: "Wysoki",
-  critical: "Krytyczny",
-};
+const EXPORT_FILE_PREFIX = "lista-dokumentow";
 
-const INCIDENT_STATUS_LABELS: Record<Incident["status"], string> = {
-  pending: "Oczekuje",
-  "in-progress": "W realizacji",
-  resolved: "Zamknięte",
-  rejected: "Odrzucone",
-};
-
-const EXPORT_FILE_PREFIX = "lista-zgloszen";
-
-function formatDateForExport(date: Date) {
+function formatDateForExport(date: Date | string) {
+  const instance = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("pl-PL", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  }).format(instance);
 }
 
 type ExportColumn = {
   label: string;
-  accessor: (incident: Incident) => string;
+  accessor: (document: CaseDocument) => string;
 };
 
 const EXPORT_COLUMNS: ExportColumn[] = [
-  {
-    label: "Numer sprawy",
-    accessor: (incident) => incident.caseNumber,
-  },
-  {
-    label: "Tytuł",
-    accessor: (incident) => incident.title,
-  },
-  {
-    label: "Zgłaszający",
-    accessor: (incident) => incident.reporterName,
-  },
-  {
-    label: "Kategoria",
-    accessor: (incident) => incident.category,
-  },
-  {
-    label: "Priorytet",
-    accessor: (incident) => INCIDENT_PRIORITY_LABELS[incident.priority],
-  },
-  {
-    label: "Status",
-    accessor: (incident) => INCIDENT_STATUS_LABELS[incident.status],
-  },
-  {
-    label: "Data zgłoszenia",
-    accessor: (incident) => formatDateForExport(incident.createdAt),
-  },
+  { label: "Numer sprawy", accessor: (document) => document.caseNumber },
+  { label: "Poszkodowany", accessor: (document) => `${document.imie} ${document.nazwisko}`.trim() },
+  { label: "PESEL", accessor: (document) => document.pesel ?? "-" },
+  { label: "Miejsce wypadku", accessor: (document) => document.miejsce_wypadku },
+  { label: "Rodzaj urazu", accessor: (document) => document.rodzaj_urazow },
+  { label: "Data wypadku", accessor: (document) => formatDateForExport(document.data_wypadku) },
+  { label: "Status", accessor: (document) => DOCUMENT_STATUS_LABELS[document.status] },
+  { label: "Priorytet", accessor: (document) => DOCUMENT_PRIORITY_LABELS[document.priority] },
 ];
 
-export interface IncidentService {
-  list(options?: IncidentListOptions): Promise<IncidentListResponse>;
-  getById(id: string): Promise<Incident | null>;
-  create(payload: CreateIncidentInput): Promise<Incident>;
-  update(id: string, payload: UpdateIncidentInput): Promise<Incident>;
-  setExportFormat(format: IncidentExportFormat): void;
+export interface DocumentService {
+  list(options?: DocumentListOptions): Promise<DocumentListResponse>;
+  getById(id: string): Promise<CaseDocument | null>;
+  create(payload: CreateDocumentInput): Promise<CaseDocument>;
+  update(id: string, payload: UpdateDocumentInput): Promise<CaseDocument>;
+  setExportFormat(format: DocumentExportFormat): void;
 }
 
-export type IncidentListSortField =
+export type DocumentListSortField =
   | "createdAt"
-  | "updatedAt"
   | "caseNumber"
-  | "title"
-  | "category"
+  | "injuredName"
   | "reporterName"
-  | "reporterEmail"
+  | "miejsce_wypadku"
+  | "data_wypadku"
   | "priority"
   | "status";
 
-export interface IncidentListOptions {
+export interface DocumentListOptions {
   page?: number;
   pageSize?: number;
   search?: string | null;
-  status?: IncidentStatus | "all" | null;
-  sort?: IncidentListSortField | null;
+  status?: DocumentStatus | "all" | null;
+  sort?: DocumentListSortField | null;
   direction?: "asc" | "desc" | null;
 }
 
-export interface IncidentListResponse {
-  items: Incident[];
+export interface DocumentListResponse {
+  items: CaseDocument[];
   totalCount: number;
   totalPages: number;
   page: number;
@@ -110,47 +82,34 @@ const NETWORK_DELAY_MS = 350;
 
 const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_MS));
 
-const cloneIncident = (incident: Incident): Incident => ({
-  ...incident,
-  createdAt: new Date(incident.createdAt),
-  updatedAt: new Date(incident.updatedAt),
+const cloneDocument = (document: CaseDocument): CaseDocument => ({
+  ...document,
+  createdAt: new Date(document.createdAt),
+  updatedAt: new Date(document.updatedAt),
+  witnesses: document.witnesses?.map((witness) => ({ ...witness })) ?? [],
 });
 
-const PRIORITY_RANK: Record<Incident["priority"], number> = {
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-};
+class MockDocumentService implements DocumentService {
+  private documents: CaseDocument[];
+  private pendingExportFormat: DocumentExportFormat | null = null;
 
-const STATUS_RANK: Record<Incident["status"], number> = {
-  pending: 1,
-  "in-progress": 2,
-  resolved: 3,
-  rejected: 4,
-};
-
-class MockIncidentService implements IncidentService {
-  private incidents: Incident[];
-  private pendingExportFormat: IncidentExportFormat | null = null;
-
-  constructor(seed: Incident[]) {
-    this.incidents = seed.map(cloneIncident);
+  constructor(seed: CaseDocument[]) {
+    this.documents = seed.map(cloneDocument);
   }
 
-  setExportFormat(format: IncidentExportFormat) {
+  setExportFormat(format: DocumentExportFormat) {
     this.pendingExportFormat = format;
   }
 
-  private consumeExportFormat(): IncidentExportFormat | null {
+  private consumeExportFormat(): DocumentExportFormat | null {
     const format = this.pendingExportFormat;
     this.pendingExportFormat = null;
     return format;
   }
 
-  async list(options?: IncidentListOptions): Promise<IncidentListResponse> {
+  async list(options?: DocumentListOptions): Promise<DocumentListResponse> {
     await delay();
-    const sortField: IncidentListSortField = options?.sort && this.isSortableField(options.sort)
+    const sortField: DocumentListSortField = options?.sort && this.isSortableField(options.sort)
       ? options.sort
       : "createdAt";
     const sortDirection: "asc" | "desc" = options?.direction === "asc" || options?.direction === "desc"
@@ -161,8 +120,8 @@ class MockIncidentService implements IncidentService {
     const searchTerm = options?.search?.trim().toLowerCase() ?? "";
     const statusFilter = options?.status === "all" ? null : options?.status;
 
-    const filtered = this.incidents.filter((incident) => {
-      if (statusFilter && incident.status !== statusFilter) {
+    const filtered = this.documents.filter((document) => {
+      if (statusFilter && document.status !== statusFilter) {
         return false;
       }
 
@@ -171,10 +130,18 @@ class MockIncidentService implements IncidentService {
       }
 
       const haystack = [
-        incident.title,
-        incident.reporterName,
-        incident.reporterEmail,
-        incident.caseNumber,
+        document.caseNumber,
+        document.title,
+        document.category,
+        document.reporterName,
+        document.reporterEmail,
+        document.reporterPhone ?? "",
+        document.imie,
+        document.nazwisko,
+        document.pesel ?? "",
+        document.miejsce_wypadku,
+        document.rodzaj_urazow,
+        document.szczegoly_okolicznosci,
       ];
 
       return haystack.some((value) => value.toLowerCase().includes(searchTerm));
@@ -221,8 +188,8 @@ class MockIncidentService implements IncidentService {
     const startIndex = (safePage - 1) * normalizedPageSize;
     const pagedItems = sorted
       .slice(startIndex, startIndex + normalizedPageSize)
-      .map(cloneIncident);
-    const result: IncidentListResponse = {
+      .map(cloneDocument);
+    const result: DocumentListResponse = {
       items: pagedItems,
       totalCount,
       totalPages,
@@ -240,7 +207,7 @@ class MockIncidentService implements IncidentService {
       return result;
     }
 
-    const exportItems = sorted.map(cloneIncident);
+    const exportItems = sorted.map(cloneDocument);
 
     if (exportItems.length === 0) {
       return {
@@ -271,15 +238,20 @@ class MockIncidentService implements IncidentService {
 
   async getById(id: string) {
     await delay();
-    const found = this.incidents.find((incident) => incident.id === id);
-    return found ? cloneIncident(found) : null;
+    const found = this.documents.find((document) => document.documentId === id);
+    return found ? cloneDocument(found) : null;
   }
 
-  async create(payload: CreateIncidentInput) {
+  async create(payload: CreateDocumentInput) {
     await delay();
     const now = new Date();
-    const newIncident: Incident = {
-      id: this.generateId(),
+    const [firstName, ...rest] = payload.reporterName.trim().split(" ");
+    const lastName = rest.join(" ") || firstName;
+    const generatedId = this.generateId();
+
+    const newDocument: CaseDocument = {
+      ...defaultDocumentData,
+      documentId: generatedId,
       caseNumber: this.generateCaseNumber(now),
       title: payload.title,
       description: payload.description,
@@ -289,30 +261,81 @@ class MockIncidentService implements IncidentService {
       reporterName: payload.reporterName,
       reporterEmail: payload.reporterEmail,
       reporterPhone: payload.reporterPhone,
-      pesel: payload.pesel,
       createdAt: now,
       updatedAt: now,
+      assignedTo: undefined,
+      notes: undefined,
+      pesel: payload.pesel ?? defaultDocumentData.pesel,
+      nr_dowodu: `GEN${generatedId}`,
+      imie: firstName,
+      nazwisko: lastName,
+      data_urodzenia: defaultDocumentData.data_urodzenia,
+      miejsce_urodzenia: defaultDocumentData.miejsce_urodzenia,
+      numer_telefonu: payload.reporterPhone ?? defaultDocumentData.numer_telefonu,
+      ulica: defaultDocumentData.ulica,
+      nr_domu: defaultDocumentData.nr_domu,
+      nr_lokalu: defaultDocumentData.nr_lokalu,
+      miejscowosc: defaultDocumentData.miejscowosc,
+      kod_pocztowy: defaultDocumentData.kod_pocztowy,
+      data_wypadku: now.toISOString().slice(0, 10),
+      godzina_wypadku: now.toTimeString().slice(0, 5),
+      miejsce_wypadku: payload.category,
+      planowana_godzina_rozpoczecia_pracy: "08:00",
+      planowana_godzina_zakonczenia_pracy: "16:00",
+      rodzaj_urazow: payload.title,
+      szczegoly_okolicznosci: payload.description,
+      czy_udzielona_pomoc: false,
+      miejsce_udzielenia_pomocy: null,
+      organ_postepowania: null,
+      czy_wypadek_podczas_uzywania_maszyny: false,
+      opis_maszyn: null,
+      czy_maszyna_posiada_atest: null,
+      czy_maszyna_w_ewidencji: null,
+      imie_zglaszajacego: firstName,
+      nazwisko_zglaszajacego: lastName,
+      pesel_zglaszajacego: payload.pesel ?? null,
+      nr_dowodu_zglaszajacego: null,
+      data_urodzenia_zglaszajacego: null,
+      nr_telefonu_zglaszajacego: payload.reporterPhone ?? null,
+      ulica_zglaszajacego: defaultDocumentData.ulica,
+      nr_domu_zglaszajacego: defaultDocumentData.nr_domu,
+      nr_lokalu_zglaszajacego: defaultDocumentData.nr_lokalu,
+      miejscowosc_zglaszajacego: defaultDocumentData.miejscowosc,
+      kod_pocztowy_zglaszajacego: defaultDocumentData.kod_pocztowy,
+      ulica_zglaszajacego_ostatniego_zamieszkania: null,
+      nr_domu_zglaszajacego_ostatniego_zamieszkania: null,
+      nr_lokalu_zglaszajacego_ostatniego_zamieszkania: null,
+      miejscowosc_zglaszajacego_ostatniego_zamieszkania: null,
+      kod_pocztowy_zglaszajacego_ostatniego_zamieszkania: null,
+      typ_korespondencji_zglaszajacego: null,
+      ulica_korespondencji_zglaszajacego: null,
+      nr_domu_korespondencji_zglaszajacego: null,
+      nr_lokalu_korespondencji_zglaszajacego: null,
+      miejscowosc_korespondencji_zglaszajacego: null,
+      kod_pocztowy_korespondencji_zglaszajacego: null,
+      nazwa_panstwa_korespondencji_zglaszajacego: null,
+      witnesses: [],
     };
 
-    this.incidents = [newIncident, ...this.incidents];
-    return cloneIncident(newIncident);
+    this.documents = [newDocument, ...this.documents];
+    return cloneDocument(newDocument);
   }
 
-  async update(id: string, payload: UpdateIncidentInput) {
+  async update(id: string, payload: UpdateDocumentInput) {
     await delay();
-    const targetIndex = this.incidents.findIndex((incident) => incident.id === id);
+    const targetIndex = this.documents.findIndex((document) => document.documentId === id);
     if (targetIndex === -1) {
-      throw new Error("Incident not found");
+      throw new Error("Document not found");
     }
 
-    const updatedIncident: Incident = {
-      ...this.incidents[targetIndex],
+    const updatedDocument: CaseDocument = {
+      ...this.documents[targetIndex],
       ...payload,
       updatedAt: new Date(),
     };
 
-    this.incidents[targetIndex] = updatedIncident;
-    return cloneIncident(updatedIncident);
+    this.documents[targetIndex] = updatedDocument;
+    return cloneDocument(updatedDocument);
   }
 
   private generateId() {
@@ -321,29 +344,28 @@ class MockIncidentService implements IncidentService {
 
   private generateCaseNumber(date: Date) {
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const sequence = String(Math.floor(Math.random() * 9000) + 1000).padStart(4, '0');
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const sequence = String(Math.floor(Math.random() * 9000) + 1000).padStart(4, "0");
     return `${year}/${month}/${sequence}`;
   }
 
-  private isSortableField(value: string): value is IncidentListSortField {
+  private isSortableField(value: string): value is DocumentListSortField {
     return [
       "createdAt",
-      "updatedAt",
       "caseNumber",
-      "title",
-      "category",
+      "injuredName",
       "reporterName",
-      "reporterEmail",
+      "miejsce_wypadku",
+      "data_wypadku",
       "priority",
       "status",
-    ].includes(value as IncidentListSortField);
+    ].includes(value as DocumentListSortField);
   }
 
-  private getDefaultDirection(field: IncidentListSortField): "asc" | "desc" {
+  private getDefaultDirection(field: DocumentListSortField): "asc" | "desc" {
     switch (field) {
       case "createdAt":
-      case "updatedAt":
+      case "data_wypadku":
         return "desc";
       default:
         return "asc";
@@ -357,41 +379,39 @@ class MockIncidentService implements IncidentService {
     return Math.max(1, Math.floor(value));
   }
 
-  private getComparableValue(incident: Incident, field: IncidentListSortField) {
+  private getComparableValue(document: CaseDocument, field: DocumentListSortField) {
     switch (field) {
       case "createdAt":
-        return incident.createdAt;
-      case "updatedAt":
-        return incident.updatedAt;
+        return document.createdAt;
       case "caseNumber":
-        return incident.caseNumber;
-      case "title":
-        return incident.title;
-      case "category":
-        return incident.category;
+        return document.caseNumber;
+      case "injuredName":
+        return `${document.imie} ${document.nazwisko}`.trim();
       case "reporterName":
-        return incident.reporterName;
-      case "reporterEmail":
-        return incident.reporterEmail;
+        return document.reporterName;
+      case "miejsce_wypadku":
+        return document.miejsce_wypadku;
+      case "data_wypadku":
+        return new Date(document.data_wypadku);
       case "priority":
-        return PRIORITY_RANK[incident.priority];
+        return DOCUMENT_PRIORITY_RANK[document.priority];
       case "status":
-        return STATUS_RANK[incident.status];
+        return DOCUMENT_STATUS_RANK[document.status];
       default:
-        return incident.createdAt;
+        return document.createdAt;
     }
   }
 }
 
-function downloadExcel(items: Incident[]) {
+function downloadExcel(items: CaseDocument[]) {
   const headerRow = EXPORT_COLUMNS
     .map((column) => `<th>${escapeHtml(column.label)}</th>`)
     .join("");
 
   const bodyRows = items
-    .map((incident) => {
+    .map((document) => {
       const cells = EXPORT_COLUMNS
-        .map((column) => `<td>${escapeHtml(column.accessor(incident))}</td>`)
+        .map((column) => `<td>${escapeHtml(column.accessor(document))}</td>`)
         .join("");
       return `<tr>${cells}</tr>`;
     })
@@ -402,15 +422,15 @@ function downloadExcel(items: Incident[]) {
   downloadBlob(blob, "xls");
 }
 
-function downloadJson(items: Incident[]) {
-  const payload = items.map((incident) => ({
-    numerSprawy: incident.caseNumber,
-    tytul: incident.title,
-    zglaszajacy: incident.reporterName,
-    kategoria: incident.category,
-    priorytet: INCIDENT_PRIORITY_LABELS[incident.priority],
-    status: INCIDENT_STATUS_LABELS[incident.status],
-    dataZgloszenia: formatDateForExport(incident.createdAt),
+function downloadJson(items: CaseDocument[]) {
+  const payload = items.map((document) => ({
+    numerSprawy: document.caseNumber,
+    poszkodowany: `${document.imie} ${document.nazwisko}`.trim(),
+    miejsceWypadku: document.miejsce_wypadku,
+    rodzajUrazu: document.rodzaj_urazow,
+    status: DOCUMENT_STATUS_LABELS[document.status],
+    priorytet: DOCUMENT_PRIORITY_LABELS[document.priority],
+    dataWypadku: formatDateForExport(document.data_wypadku),
   }));
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -419,12 +439,12 @@ function downloadJson(items: Incident[]) {
   downloadBlob(blob, "json");
 }
 
-function downloadPdf(items: Incident[]) {
+function downloadPdf(items: CaseDocument[]) {
   const MAX_COLUMN_WIDTH = 40;
 
   const headerCells = EXPORT_COLUMNS.map((column) => normalizeCellValue(column.label));
-  const dataRows = items.map((incident) =>
-    EXPORT_COLUMNS.map((column) => truncateValue(column.accessor(incident), MAX_COLUMN_WIDTH))
+  const dataRows = items.map((document) =>
+    EXPORT_COLUMNS.map((column) => truncateValue(column.accessor(document), MAX_COLUMN_WIDTH))
   );
 
   const columnWidths = headerCells.map((header, columnIndex) => {
@@ -532,13 +552,12 @@ function downloadBlob(blob: Blob, extension: string) {
 
 const useMock = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
 
-const incidentService: IncidentService = (() => {
+const documentService: DocumentService = (() => {
   if (useMock) {
-    return new MockIncidentService(mockIncidents);
+    return new MockDocumentService(mockDocuments);
   }
 
-  // Placeholder for future real API implementation
-  return new MockIncidentService(mockIncidents);
+  return new MockDocumentService(mockDocuments);
 })();
 
-export { incidentService };
+export { documentService };

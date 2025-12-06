@@ -12,7 +12,7 @@ type DashboardHeaderProps = {
   breadcrumbs: BreadcrumbItem[];
   title: string;
   description: string;
-  onCreateIncident: () => void;
+  onCreateDocument: () => void;
   onExportClick: () => void;
 };
 
@@ -20,7 +20,7 @@ export default function DashboardHeader({
   breadcrumbs,
   title,
   description,
-  onCreateIncident,
+  onCreateDocument,
   onExportClick,
 }: DashboardHeaderProps) {
   return (
@@ -34,7 +34,7 @@ export default function DashboardHeader({
         <div className="flex flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <button
             type="button"
-            onClick={onCreateIncident}
+            onClick={onCreateDocument}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-(--color-accent) px-5 py-2.5 text-sm font-semibold text-(--color-accent-text) transition hover:bg-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
           >
             <svg
@@ -50,7 +50,7 @@ export default function DashboardHeader({
               <path d="M10 4v12" />
               <path d="M4 10h12" />
             </svg>
-            Dodaj zgłoszenie
+            Dodaj dokument
           </button>
           <button
             type="button"
