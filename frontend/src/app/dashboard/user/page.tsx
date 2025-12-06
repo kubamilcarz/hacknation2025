@@ -5,13 +5,21 @@ import type { ChangeEvent } from 'react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { IncidentWizardLayout } from '@/components/user/IncidentWizardLayout';
 import { IncidentStepTracker } from '@/components/user/IncidentStepTracker';
-import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
-import { IncidentTextField } from '@/components/user/IncidentTextField';
-import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
 import { IncidentWizardNavigation } from '@/components/user/IncidentWizardNavigation';
-import { IncidentInfoCard } from '@/components/user/IncidentInfoCard';
-import { InfoTooltip } from '@/components/user/InfoTooltip';
 import type { IncidentWizardStep } from '@/components/user/IncidentStepTracker';
+import { IdentityStepSection } from '@/components/user/dashboard/IdentityStepSection';
+import { AccidentStepSection } from '@/components/user/dashboard/AccidentStepSection';
+import { WitnessesStepSection } from '@/components/user/dashboard/WitnessesStepSection';
+import { ResidenceStepSection } from '@/components/user/dashboard/ResidenceStepSection';
+import { ReviewStepSection } from '@/components/user/dashboard/ReviewStepSection';
+import { UserDashboardAside } from '@/components/user/dashboard/UserDashboardAside';
+import {
+  WITNESS_EDITABLE_FIELDS,
+  WITNESS_FIELD_VALIDATORS,
+  createEmptyWitness,
+  type WitnessEditableField,
+  witnessFieldKey,
+} from '@/components/user/dashboard/witnesses/utils';
 import { useDocuments } from '@/context/DocumentContext';
 import { defaultDocumentData } from '@/lib/mock-documents';
 import type { CreateDocumentInput } from '@/lib/services/documentService';
@@ -169,6 +177,7 @@ export default function UserDashboard() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
 
   const currentStep = useMemo(() => steps[currentStepIndex] ?? steps[0], [currentStepIndex]);
 
@@ -187,7 +196,12 @@ export default function UserDashboard() {
     return validator ? validator(rawValue ?? '') : null;
   };
 
-  const applyValidationResult = (fieldName: IncidentFieldKey, errorMessage: string | null) => {
+  const getWitnessFieldErrorMessage = (fieldName: WitnessEditableField, rawValue: string) => {
+    const validator = WITNESS_FIELD_VALIDATORS[fieldName];
+    return validator ? validator(rawValue ?? '') : null;
+  };
+
+  const applyValidationResult = (fieldName: string, errorMessage: string | null) => {
     setValidationErrors((prev) => {
       if (errorMessage) {
         if (prev[fieldName] === errorMessage) {
@@ -278,6 +292,109 @@ export default function UserDashboard() {
       updateDraftField(field)(event.target.value as CreateDocumentInput[Key]);
     };
 
+  const witnesses = incidentDraft.witnesses ?? [];
+
+  const setWitnessFieldValue = (index: number, field: WitnessEditableField, nextValue: string) => {
+    setIncidentDraft((prev) => {
+      const previousWitnesses = prev.witnesses ?? [];
+      const nextWitnesses = previousWitnesses.map((witness, witnessIndex) => {
+        if (witnessIndex !== index) {
+          return witness;
+        }
+
+        return {
+          ...witness,
+          [field]: nextValue,
+        };
+      });
+
+      return {
+        ...prev,
+        witnesses: nextWitnesses,
+      };
+    });
+
+    const errorMessage = getWitnessFieldErrorMessage(field, nextValue);
+    applyValidationResult(witnessFieldKey(index, field), errorMessage);
+  };
+
+  const handleWitnessInputChange = (index: number, field: WitnessEditableField) =>
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setWitnessFieldValue(index, field, event.target.value);
+    };
+
+  const handleAddWitness = () => {
+    const newIndex = witnesses.length;
+    setIncidentDraft((prev) => ({
+      ...prev,
+      witnesses: [...(prev.witnesses ?? []), createEmptyWitness()],
+    }));
+    setActiveWitnessIndex(newIndex);
+  };
+
+  const handleRemoveWitness = (index: number) => {
+    const nextWitnesses = witnesses.filter((_, witnessIndex) => witnessIndex !== index);
+    setIncidentDraft((prev) => ({
+      ...prev,
+      witnesses: nextWitnesses,
+    }));
+
+    setActiveWitnessIndex((current) => {
+      if (current == null) {
+        return current;
+      }
+
+      if (current === index) {
+        return null;
+      }
+
+      return current > index ? current - 1 : current;
+    });
+
+    setValidationErrors((prev) => {
+      const next: Record<string, string> = {};
+
+      Object.entries(prev).forEach(([key, value]) => {
+        if (!key.startsWith('witnesses.')) {
+          next[key] = value;
+        }
+      });
+
+      nextWitnesses.forEach((witness, witnessIndex) => {
+        WITNESS_EDITABLE_FIELDS.forEach((field) => {
+          const validator = WITNESS_FIELD_VALIDATORS[field];
+          if (!validator) {
+            return;
+          }
+
+          const rawValue = typeof witness[field] === 'string' ? (witness[field] as string) : witness[field] == null ? '' : String(witness[field]);
+          if (!rawValue && (field === 'imie' || field === 'nazwisko')) {
+            const errorMessage = validator(rawValue);
+            if (errorMessage) {
+              next[witnessFieldKey(witnessIndex, field)] = errorMessage;
+            }
+            return;
+          }
+
+          if (!rawValue) {
+            return;
+          }
+
+          const errorMessage = validator(rawValue);
+          if (errorMessage) {
+            next[witnessFieldKey(witnessIndex, field)] = errorMessage;
+          }
+        });
+      });
+
+      return next;
+    });
+  };
+
+  const handleToggleWitnessEdit = (index: number) => {
+    setActiveWitnessIndex((current) => (current === index ? null : index));
+  };
+
   const isCurrentStepValid = isStepValid(currentStep.id);
   const hasNextStep = currentStepIndex < steps.length - 1;
   const isLastStep = currentStepIndex === steps.length - 1;
@@ -308,9 +425,23 @@ export default function UserDashboard() {
     setSubmitError(null);
 
     try {
+      const sanitizedWitnesses = (incidentDraft.witnesses ?? [])
+        .map((witness) => ({
+          ...witness,
+          imie: (witness.imie ?? '').trim(),
+          nazwisko: (witness.nazwisko ?? '').trim(),
+          ulica: (witness.ulica ?? '').trim(),
+          nr_domu: (witness.nr_domu ?? '').trim(),
+          nr_lokalu: (witness.nr_lokalu ?? '').trim(),
+          miejscowosc: (witness.miejscowosc ?? '').trim(),
+          kod_pocztowy: (witness.kod_pocztowy ?? '').trim(),
+          nazwa_panstwa: (witness.nazwa_panstwa ?? '').trim(),
+        }))
+        .filter((witness) => witness.imie.length > 0 || witness.nazwisko.length > 0);
+
       const payload: CreateDocumentInput = {
         ...incidentDraft,
-        witnesses: incidentDraft.witnesses ?? [],
+        witnesses: sanitizedWitnesses,
         szczegoly_okolicznosci: (incidentDraft.szczegoly_okolicznosci ?? '').trim(),
       };
 
@@ -357,18 +488,6 @@ export default function UserDashboard() {
     setFurthestStepIndex((previousHighest) => Math.max(previousHighest, targetIndex));
   };
 
-  const renderAside = () => (
-    <>
-      <IncidentInfoCard title="Co się zmieni?">
-        Tu pojawią się informacje kontekstowe zależne od etapu, np. checklista dokumentów do zebrania lub status
-        autozapisu.
-      </IncidentInfoCard>
-      <IncidentInfoCard title="Wskazówki od mentorów">
-        Dzięki integracji z zespołem ZUS możemy dołączać wskazówki dotyczące poprawnego wypełniania formularza.
-      </IncidentInfoCard>
-    </>
-  );
-
   return (
     <div className="min-h-screen bg-app py-8">
       <div className="mx-auto w-full max-w-6xl px-6">
@@ -403,154 +522,46 @@ export default function UserDashboard() {
           stepCount={steps.length}
           title={currentStep.title}
           description={currentStep.description}
-          rightColumn={renderAside()}
+          rightColumn={<UserDashboardAside />}
         >
           <div className="space-y-10">
             {currentStep.id === 'identity' && (
-              <IncidentWizardSection
-                title="Tożsamość osoby poszkodowanej"
-                description="Dane służą do jednoznacznego zidentyfikowania osoby w systemach ZUS."
-              >
-                <IncidentTextField
-                  label="PESEL"
-                  name="pesel"
-                  value={incidentDraft.pesel ?? ''}
-                  maxLength={11}
-                  onChange={handleInputChange('pesel')}
-                  error={validationErrors.pesel}
-                  hint="11 cyfr, bez spacji. System później zweryfikuje poprawność numeru."
-                />
-                <IncidentTextField
-                  label="Numer dokumentu tożsamości"
-                  name="nr_dowodu"
-                  value={incidentDraft.nr_dowodu ?? ''}
-                  onChange={handleInputChange('nr_dowodu')}
-                  error={validationErrors.nr_dowodu}
-                  hint="Najczęściej dowód osobisty. Możesz podać paszport, jeśli przebywasz za granicą."
-                />
-                <IncidentTextField
-                  label="Imię"
-                  name="imie"
-                  value={incidentDraft.imie ?? ''}
-                  onChange={handleInputChange('imie')}
-                  error={validationErrors.imie}
-                />
-                <IncidentTextField
-                  label="Nazwisko"
-                  name="nazwisko"
-                  value={incidentDraft.nazwisko ?? ''}
-                  onChange={handleInputChange('nazwisko')}
-                  error={validationErrors.nazwisko}
-                />
-                <IncidentTextField
-                  label="Telefon kontaktowy"
-                  name="numer_telefonu"
-                  value={incidentDraft.numer_telefonu ?? ''}
-                  optional
-                  onChange={handleInputChange('numer_telefonu')}
-                  hint="Przyspiesza kontakt w razie dodatkowych pytań."
-                />
-              </IncidentWizardSection>
+              <IdentityStepSection
+                draft={incidentDraft}
+                validationErrors={validationErrors}
+                onInputChange={handleInputChange}
+              />
             )}
 
             {currentStep.id === 'accident' && (
-              <IncidentWizardSection
-                title="Opis zdarzenia"
-                description="Szczegółowy opis pomaga ekspertom ZUS właściwie zakwalifikować zgłoszenie."
-                actions={
-                  <InfoTooltip label="Dlaczego o to pytamy?">
-                    <div className="space-y-2">
-                      <p>
-                        Aby uznać zdarzenie za wypadek przy pracy, specjaliści ZUS sprawdzają, czy wystąpiły wszystkie poniższe
-                        elementy.
-                      </p>
-                      <ul className="list-disc space-y-1 pl-4">
-                        <li>Nagłość zdarzenia – krótki, nieoczekiwany przebieg.</li>
-                        <li>Przyczyna zewnętrzna – wpływ osoby, maszyny lub warunków środowiska.</li>
-                        <li>Uraz lub śmierć – powstanie szkody na zdrowiu.</li>
-                        <li>Związek z pracą – zdarzenie podczas wykonywania obowiązków.</li>
-                      </ul>
-                      <p className="text-xs text-muted">
-                        Opisz w formularzu fakty potwierdzające każde z kryteriów, aby przyspieszyć decyzję.
-                      </p>
-                    </div>
-                  </InfoTooltip>
-                }
-              >
-                <IncidentTextField
-                  component="textarea"
-                  label="Co dokładnie się stało?"
-                  name="szczegoly_okolicznosci"
-                  value={incidentDraft.szczegoly_okolicznosci ?? ''}
-                  onChange={handleTextareaChange('szczegoly_okolicznosci')}
-                  error={validationErrors.szczegoly_okolicznosci}
-                  hint="Uwzględnij czas, miejsce, wykonywane czynności i używane maszyny."
-                  aiSuggestion={
-                    <IncidentAiSuggestion>
-                      Podaj fakty: <strong>gdzie</strong>, <strong>kiedy</strong>, <strong>jak</strong> i <strong>dlaczego</strong> doszło do zdarzenia. Jeśli byli świadkowie lub używaliście maszyn, zapisz ich nazwy i numery seryjne.
-                    </IncidentAiSuggestion>
-                  }
-                />
-              </IncidentWizardSection>
+              <AccidentStepSection
+                draft={incidentDraft}
+                validationErrors={validationErrors}
+                onTextareaChange={handleTextareaChange}
+              />
             )}
 
             {currentStep.id === 'witnesses' && (
-              <IncidentWizardSection
-                title="Świadkowie"
-                description="Możesz dodać dowolną liczbę osób, które potwierdzą przebieg zdarzenia."
-                actions={
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground"
-                  >
-                    Dodaj świadka
-                  </button>
-                }
-              >
-                <IncidentAiSuggestion title="Brak świadków?" variant="warning">
-                  Jeśli nie było obserwatorów zdarzenia, zaznacz to w dalszej części formularza. System zaproponuje alternatywne dokumenty potwierdzające zgłoszenie.
-                </IncidentAiSuggestion>
-              </IncidentWizardSection>
+              <WitnessesStepSection
+                witnesses={witnesses}
+                activeWitnessIndex={activeWitnessIndex}
+                validationErrors={validationErrors}
+                onAddWitness={handleAddWitness}
+                onRemoveWitness={handleRemoveWitness}
+                onToggleWitnessEdit={handleToggleWitnessEdit}
+                onWitnessInputChange={handleWitnessInputChange}
+              />
             )}
 
             {currentStep.id === 'residence' && (
-              <IncidentWizardSection
-                title="Adres zamieszkania"
-                description="Aktualny adres zamieszkania poszkodowanego. Jeżeli mieszkasz za granicą, w kolejnym kroku poprosimy o ostatni adres w Polsce."
-              >
-                <IncidentTextField
-                  label="Ulica"
-                  name="ulica"
-                  value={incidentDraft.ulica ?? ''}
-                  onChange={handleInputChange('ulica')}
-                  optional
-                  hint="Pola adresowe zostaną zasilone danymi z bazy Poczty Polskiej w kolejnej iteracji."
-                />
-              </IncidentWizardSection>
+              <ResidenceStepSection draft={incidentDraft} onInputChange={handleInputChange} />
             )}
 
             {currentStep.id === 'review' && (
-              <IncidentWizardSection
-                title="Podsumowanie"
-                description="Pokazujemy zebrane dane w formie do szybkiej weryfikacji."
-              >
-                {hasSubmittedSuccessfully ? (
-                  <IncidentAiSuggestion title="Zgłoszenie wysłane">
-                    Twój szkic został przesłany do systemu. Możesz wrócić do poprzednich kroków, by wprowadzić korekty lub zamknąć
-                    kreator.
-                  </IncidentAiSuggestion>
-                ) : (
-                  <IncidentAiSuggestion>
-                    W finalnej wersji kreator zrenderuje tutaj listę wszystkich sekcji wraz z możliwością szybkiej edycji.
-                    Zatwierdzając, utworzysz pojedynczy dokument na podstawie zgromadzonych danych.
-                  </IncidentAiSuggestion>
-                )}
-                {submitError && (
-                  <IncidentAiSuggestion title="Błąd zapisu" variant="warning">
-                    {submitError}
-                  </IncidentAiSuggestion>
-                )}
-              </IncidentWizardSection>
+              <ReviewStepSection
+                hasSubmittedSuccessfully={hasSubmittedSuccessfully}
+                submitError={submitError}
+              />
             )}
           </div>
 
