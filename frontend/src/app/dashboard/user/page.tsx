@@ -10,6 +10,7 @@ import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
 import { IncidentWizardNavigation } from '@/components/user/IncidentWizardNavigation';
 import { IncidentInfoCard } from '@/components/user/IncidentInfoCard';
+import { InfoTooltip } from '@/components/user/InfoTooltip';
 import type { IncidentWizardStep } from '@/components/user/IncidentStepTracker';
 import { useDocuments } from '@/context/DocumentContext';
 import { defaultDocumentData } from '@/lib/mock-documents';
@@ -456,6 +457,25 @@ export default function UserDashboard() {
               <IncidentWizardSection
                 title="Opis zdarzenia"
                 description="Szczegółowy opis pomaga ekspertom ZUS właściwie zakwalifikować zgłoszenie."
+                actions={
+                  <InfoTooltip label="Dlaczego o to pytamy?">
+                    <div className="space-y-2">
+                      <p>
+                        Aby uznać zdarzenie za wypadek przy pracy, specjaliści ZUS sprawdzają, czy wystąpiły wszystkie poniższe
+                        elementy.
+                      </p>
+                      <ul className="list-disc space-y-1 pl-4">
+                        <li>Nagłość zdarzenia – krótki, nieoczekiwany przebieg.</li>
+                        <li>Przyczyna zewnętrzna – wpływ osoby, maszyny lub warunków środowiska.</li>
+                        <li>Uraz lub śmierć – powstanie szkody na zdrowiu.</li>
+                        <li>Związek z pracą – zdarzenie podczas wykonywania obowiązków.</li>
+                      </ul>
+                      <p className="text-xs text-muted">
+                        Opisz w formularzu fakty potwierdzające każde z kryteriów, aby przyspieszyć decyzję.
+                      </p>
+                    </div>
+                  </InfoTooltip>
+                }
               >
                 <IncidentTextField
                   component="textarea"
