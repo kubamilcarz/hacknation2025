@@ -37,6 +37,7 @@ const statusRank: Record<IncidentStatus, number> = {
 };
 
 const MIN_COLUMN_WIDTH = 140;
+const TEXT_COLUMN_IDS = new Set(['caseNumber', 'title', 'reporterName', 'category']);
 
 type ColumnDefinition = {
   id: string;
@@ -49,6 +50,8 @@ type ColumnDefinition = {
   sortAccessor?: (incident: Incident) => string | number | Date;
   defaultSortDirection?: 'asc' | 'desc';
   sticky?: 'left' | 'right';
+  resizable?: boolean;
+  width?: number;
 };
 
 type SortConfig = { columnId: string; direction: 'asc' | 'desc' } | null;
@@ -195,7 +198,7 @@ export default function EmployeeDashboard() {
           </button>
 
           {isOpen && (
-            <div className="absolute right-0 top-12 z-20 w-48 rounded-lg border border-subtle bg-surface p-1 text-sm shadow-lg">
+            <div className="absolute right-0 top-12 z-50 w-48 rounded-lg border border-subtle bg-surface p-1 text-sm shadow-lg">
               <button
                 type="button"
                 onClick={closeActionMenu}
@@ -235,7 +238,7 @@ export default function EmployeeDashboard() {
         label: 'Numer sprawy',
         minWidth: 160,
         cellClassName: 'font-semibold text-secondary',
-        render: (incident) => incident.caseNumber,
+        render: (incident) => <span className="block truncate">{incident.caseNumber}</span>,
         sortable: true,
         sortAccessor: (incident) => incident.caseNumber,
         sticky: 'left',
@@ -245,7 +248,7 @@ export default function EmployeeDashboard() {
         label: 'Tytuł',
         minWidth: 220,
         cellClassName: 'text-primary',
-        render: (incident) => incident.title,
+        render: (incident) => <span className="block truncate">{incident.title}</span>,
         sortable: true,
         sortAccessor: (incident) => incident.title,
       },
@@ -254,7 +257,7 @@ export default function EmployeeDashboard() {
         label: 'Zgłaszający',
         minWidth: 190,
         cellClassName: 'text-secondary',
-        render: (incident) => incident.reporterName,
+        render: (incident) => <span className="block truncate">{incident.reporterName}</span>,
         sortable: true,
         sortAccessor: (incident) => incident.reporterName,
       },
@@ -263,7 +266,7 @@ export default function EmployeeDashboard() {
         label: 'Kategoria',
         minWidth: 170,
         cellClassName: 'text-secondary',
-        render: (incident) => incident.category,
+        render: (incident) => <span className="block truncate">{incident.category}</span>,
         sortable: true,
         sortAccessor: (incident) => incident.category,
       },
@@ -296,9 +299,11 @@ export default function EmployeeDashboard() {
       {
         id: 'actions',
         label: 'Akcje',
-        minWidth: 120,
+        minWidth: 124,
+        width: 124,
         sticky: 'right',
         align: 'right',
+        resizable: false,
         render: renderActionsCell,
       },
     ],
@@ -406,7 +411,8 @@ export default function EmployeeDashboard() {
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
     columns.reduce<Record<string, number>>((accumulator, column) => {
-      accumulator[column.id] = column.minWidth ?? MIN_COLUMN_WIDTH;
+      const initialWidth = column.width ?? column.minWidth ?? MIN_COLUMN_WIDTH;
+      accumulator[column.id] = initialWidth;
       return accumulator;
     }, {})
   );
@@ -435,10 +441,22 @@ export default function EmployeeDashboard() {
     return undefined;
   }, [isResizing]);
 
-  const getColumnWidth = (columnId: string, fallback: number) =>
-    columnWidths[columnId] ?? fallback;
+  const getColumnWidth = useCallback(
+    (columnId: string, fallback: number) => {
+      const column = columns.find((entry) => entry.id === columnId);
+      const defaultWidth = column?.width ?? column?.minWidth ?? fallback;
+      return columnWidths[columnId] ?? defaultWidth;
+    },
+    [columnWidths, columns]
+  );
 
   const startResize = (columnId: string, event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 1) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
     const headerCell = event.currentTarget.closest('th') as HTMLTableCellElement | null;
@@ -449,6 +467,9 @@ export default function EmployeeDashboard() {
     const startX = event.clientX;
     const startWidth = columnWidths[columnId] ?? headerCell.offsetWidth;
     const columnDefinition = columns.find((column) => column.id === columnId);
+    if (columnDefinition?.resizable === false) {
+      return;
+    }
     const minWidth = columnDefinition?.minWidth ?? MIN_COLUMN_WIDTH;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -468,6 +489,38 @@ export default function EmployeeDashboard() {
     setIsResizing(true);
   };
 
+  const applyWidthToAllColumns = useCallback(
+    (targetColumnId: string) => {
+      const referenceWidth = getColumnWidth(targetColumnId, MIN_COLUMN_WIDTH);
+      setColumnWidths((current) =>
+        columns.reduce<Record<string, number>>((accumulator, column) => {
+          if (column.resizable === false) {
+            accumulator[column.id] = current[column.id] ?? column.width ?? column.minWidth ?? MIN_COLUMN_WIDTH;
+            return accumulator;
+          }
+
+          const minWidth = column.minWidth ?? MIN_COLUMN_WIDTH;
+          accumulator[column.id] = Math.max(minWidth, referenceWidth);
+          return accumulator;
+        }, {})
+      );
+    },
+    [columns, getColumnWidth]
+  );
+
+  const handleResizeDoubleClick = useCallback(
+    (columnId: string, event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const column = columns.find((entry) => entry.id === columnId);
+      if (column?.resizable === false) {
+        return;
+      }
+      applyWidthToAllColumns(columnId);
+    },
+    [applyWidthToAllColumns, columns]
+  );
+
   return (
     <div className="min-h-screen bg-app py-8">
       <div className="mx-auto w-full max-w-6xl px-6">
@@ -480,7 +533,7 @@ export default function EmployeeDashboard() {
               ]}
             />
             <div>
-              <h1 className="text-3xl font-semibold text-primary">Panel pracownika ZUS</h1>
+              <h1 className="text-3xl font-semibold text-primary">Lista zgłoszeń</h1>
               <p className="mt-2 text-sm text-muted">
                 Przegląd zgłoszeń z wirtualnego asystenta. Obecnie korzystamy z danych testowych – po integracji
                 z backendem lista zostanie zsynchronizowana z systemami ZUS.
@@ -539,6 +592,7 @@ export default function EmployeeDashboard() {
                           : column.sticky === 'right'
                             ? 'sticky right-0'
                             : '';
+                      const canResize = column.resizable !== false;
                       return (
                         <th
                           key={column.id}
@@ -576,14 +630,17 @@ export default function EmployeeDashboard() {
                                 </span>
                               )}
                             </button>
-                            <button
-                              type="button"
-                              onMouseDown={(event) => startResize(column.id, event)}
-                              className="ml-1 flex h-6 w-2 cursor-col-resize items-center justify-center rounded-md bg-transparent opacity-0 transition hover:bg-(--color-accent-soft) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 group-hover:opacity-100"
-                              aria-label={`Dostosuj szerokość kolumny ${column.label}`}
-                            >
-                              <span className="h-full w-px bg-(--color-border-strong)" aria-hidden="true" />
-                            </button>
+                            {canResize && (
+                              <button
+                                type="button"
+                                onMouseDown={(event) => startResize(column.id, event)}
+                                onDoubleClick={(event) => handleResizeDoubleClick(column.id, event)}
+                                className="ml-1 flex h-6 w-2 cursor-col-resize items-center justify-center rounded-md bg-transparent opacity-0 transition hover:bg-(--color-accent-soft) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 group-hover:opacity-100"
+                                aria-label={`Dostosuj szerokość kolumny ${column.label}`}
+                              >
+                                <span className="h-full w-px bg-(--color-border-strong)" aria-hidden="true" />
+                              </button>
+                            )}
                           </div>
                         </th>
                       );
@@ -601,14 +658,20 @@ export default function EmployeeDashboard() {
                             : column.sticky === 'right'
                               ? 'sticky right-0'
                               : '';
+                        const isTextColumn = TEXT_COLUMN_IDS.has(column.id);
+                        const alignmentClass = column.align === 'right' ? 'text-right' : 'text-left';
+                        const isActionsColumn = column.id === 'actions';
+                        const isMenuOpenForRow = isActionsColumn && openActionMenuId === incident.id;
+                        const baseZIndex = column.sticky ? 5 : undefined;
+                        const cellZIndex = isMenuOpenForRow ? 80 : baseZIndex;
                         return (
                           <td
                             key={`${incident.id}-${column.id}`}
-                            className={`px-3 py-3 ${stickyClassName} ${column.cellClassName ?? ''}`.trim()}
+                            className={`px-3 py-3 ${alignmentClass} ${stickyClassName} ${column.cellClassName ?? ''} ${isTextColumn ? 'overflow-hidden whitespace-nowrap' : ''}`.trim()}
                             style={{
                               width,
                               minWidth: width,
-                              zIndex: column.sticky ? 5 : undefined,
+                              zIndex: cellZIndex,
                               background: column.sticky ? 'var(--color-surface)' : undefined,
                             }}
                           >
