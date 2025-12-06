@@ -31,7 +31,7 @@ export default function NavBar({ variant }: NavBarProps = {}) {
               priority
             />
           </div>
-          <span className="mr-3 h-2 w-2 rounded-full bg-gray-400" aria-hidden="true" />
+          <span className="mr-3 h-2 w-2 rounded-full bg-(--color-support)" aria-hidden="true" />
           <span className="hidden text-sm font-semibold text-muted md:inline">ZANT</span>
         </Link>
  

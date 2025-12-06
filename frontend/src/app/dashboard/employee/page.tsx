@@ -52,10 +52,10 @@ export default function EmployeeDashboard() {
   const getStatusBadge = (status: IncidentStatus) => {
     const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium';
     const styles: Record<IncidentStatus, string> = {
-      pending: 'bg-amber-100 text-amber-900',
-      'in-progress': 'bg-blue-100 text-blue-900',
-      resolved: 'bg-emerald-100 text-emerald-900',
-      rejected: 'bg-rose-100 text-rose-900',
+      pending: 'bg-(--color-warning-soft) text-(--color-warning)',
+      'in-progress': 'bg-(--color-info-soft) text-(--color-info)',
+      resolved: 'bg-(--color-success-soft) text-(--color-success)',
+      rejected: 'bg-(--color-error-soft) text-(--color-error)',
     };
 
     return <span className={`${base} ${styles[status]}`}>{statusLabels[status]}</span>;
@@ -64,10 +64,10 @@ export default function EmployeeDashboard() {
   const getPriorityBadge = (priority: IncidentPriority) => {
     const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium';
     const styles: Record<IncidentPriority, string> = {
-      low: 'bg-slate-100 text-slate-800',
-      medium: 'bg-blue-100 text-blue-900',
-      high: 'bg-orange-100 text-orange-900',
-      critical: 'bg-red-100 text-red-900',
+      low: 'bg-(--color-support-soft) text-(--color-support)',
+      medium: 'bg-(--color-info-soft) text-(--color-info)',
+      high: 'bg-(--color-warning-soft) text-(--color-warning)',
+      critical: 'bg-(--color-error-soft) text-(--color-error)',
     };
 
     return <span className={`${base} ${styles[priority]}`}>{priorityLabels[priority]}</span>;
