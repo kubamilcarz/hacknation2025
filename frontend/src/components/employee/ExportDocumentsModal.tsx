@@ -19,8 +19,8 @@ const FORMAT_OPTIONS: Array<{
   },
   {
     value: "excel",
-    label: "Excel (.xls)",
-    helper: "Tabela otwierana w Excelu oraz LibreOffice.",
+    label: "Excel (.xlsx)",
+    helper: "Arkusz zgodny z Microsoft Excel oraz LibreOffice.",
   },
   {
     value: "json",

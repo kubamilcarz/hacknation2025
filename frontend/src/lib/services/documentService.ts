@@ -53,15 +53,6 @@ function normalizeCellValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function escapeHtml(value: string) {
-  return normalizeCellValue(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 export type DocumentListSortField =
   | "id"
   | "imie"
@@ -376,40 +367,44 @@ class MockDocumentApi implements DocumentApi {
 }
 
 function downloadExcel(items: Document[]) {
-  const headerRow = EXPORT_COLUMNS.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("");
-  const bodyRows = items
-    .map((document) => {
-      const cells = EXPORT_COLUMNS.map((column) => `<td>${escapeHtml(column.accessor(document))}</td>`).join("");
-      return `<tr>${cells}</tr>`;
-    })
-    .join("");
+  if (typeof window === "undefined") {
+    return;
+  }
 
-  const html = `\uFEFF<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40" lang="pl">
-  <head>
-    <meta charset="UTF-8" />
-    <xml>
-      <x:ExcelWorkbook>
-        <x:ExcelWorksheets>
-          <x:ExcelWorksheet>
-            <x:Name>Zgłoszenia</x:Name>
-            <x:WorksheetOptions>
-              <x:DisplayGridlines />
-            </x:WorksheetOptions>
-          </x:ExcelWorksheet>
-        </x:ExcelWorksheets>
-      </x:ExcelWorkbook>
-    </xml>
-  </head>
-  <body>
-    <table border="1">
-      <thead><tr>${headerRow}</tr></thead>
-      <tbody>${bodyRows}</tbody>
-    </table>
-  </body>
-</html>`;
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });
-  downloadBlob(blob, "xls");
+  const header = EXPORT_COLUMNS.map((column) => column.label);
+  const rows = items.map((document) =>
+    EXPORT_COLUMNS.map((column) => {
+      const value = column.accessor(document);
+      return value ?? "";
+    })
+  );
+
+  const data = [header, ...rows];
+
+  void (async () => {
+    const XLSX = await import("xlsx");
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    const columnWidths = header.map((_, columnIndex) => {
+      const maxLength = data.reduce((length, currentRow) => {
+        const cell = currentRow[columnIndex];
+        const cellLength = cell == null ? 0 : String(cell).length;
+        return Math.max(length, cellLength);
+      }, 0);
+      return { wch: Math.min(Math.max(maxLength + 2, 12), 50) };
+    });
+
+    worksheet["!cols"] = columnWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Zgłoszenia");
+
+    const arrayBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([arrayBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    downloadBlob(blob, "xlsx");
+  })();
 }
 
 function downloadJson(items: Document[]) {
