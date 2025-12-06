@@ -1,26 +1,144 @@
 @import "tailwindcss";
 
-:root {
-  --background: #eeeeee;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-background: #f8fafc;
+    --color-surface: #ffffff;
+    --color-surface-subdued: #f1f5f9;
+    --color-surface-elevated: #fefefe;
+    --color-divider: rgba(148, 163, 184, 0.28);
+    --color-border: rgba(148, 163, 184, 0.35);
+    --color-border-strong: rgba(51, 65, 85, 0.25);
+    --color-text-primary: #0f172a;
+    --color-text-secondary: #334155;
+    --color-text-muted: #64748b;
+    --color-accent: #10b981;
+    --color-accent-strong: #047857;
+    --color-accent-soft: rgba(16, 185, 129, 0.14);
+    --color-accent-text: #ecfdf5;
+    --color-focus-ring: rgba(16, 185, 129, 0.55);
+    --color-toolbar-background: rgba(255, 255, 255, 0.92);
+    --color-toolbar-border: rgba(148, 163, 184, 0.45);
+    --color-toolbar-foreground: #0f172a;
+    --color-toolbar-muted: #475569;
+    --shadow-card: 0 24px 60px -32px rgba(15, 23, 42, 0.25);
+    --shadow-popover: 0 22px 45px -30px rgba(15, 23, 42, 0.35);
+    --shadow-toolbar: 0 18px 48px -32px rgba(15, 23, 42, 0.32);
+    --shadow-toolbar-strong: 0 24px 56px -30px rgba(16, 185, 129, 0.35);
+    --font-size-root: 16px;
+    --font-size-sm: 14px;
+    --font-size-lg: 18px;
+    --font-size-xl: 20px;
+    --line-height-base: 1.65;
+  }
+
+  @theme inline {
+    --color-background: var(--color-background);
+    --color-foreground: var(--color-text-primary);
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+  }
+
+  html {
+    font-size: var(--font-size-root, 16px);
+  }
+
+  body {
+    background-color: var(--color-background, #f8fafc);
+    color: var(--color-text-primary, #0f172a);
+    font-family: var(--font-geist-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    line-height: var(--line-height-base, 1.65);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  ::selection {
+    background-color: var(--color-accent, #10b981);
+    color: var(--color-accent-text, #ffffff);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .bg-background {
+    background-color: var(--color-background);
+  }
+
+  .bg-surface {
+    background-color: var(--color-surface);
+  }
+
+  .bg-surface-subdued {
+    background-color: var(--color-surface-subdued);
+  }
+
+  .bg-surface-elevated {
+    background-color: var(--color-surface-elevated);
+  }
+
+  .bg-accent-soft {
+    background-color: var(--color-accent-soft);
+  }
+
+  .bg-toolbar {
+    background-color: var(--color-toolbar-background);
+  }
+
+  .text-primary {
+    color: var(--color-text-primary);
+  }
+
+  .text-secondary {
+    color: var(--color-text-secondary);
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+
+  .text-accent {
+    color: var(--color-accent-strong);
+  }
+
+  .text-toolbar {
+    color: var(--color-toolbar-foreground);
+  }
+
+  .text-toolbar-muted {
+    color: var(--color-toolbar-muted);
+  }
+
+  .border-subtle {
+    border-color: var(--color-border);
+  }
+
+  .border-strong {
+    border-color: var(--color-border-strong);
+  }
+
+  .border-toolbar {
+    border-color: var(--color-toolbar-border);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-popover {
+    box-shadow: var(--shadow-popover);
+  }
+
+  .shadow-toolbar {
+    box-shadow: var(--shadow-toolbar);
+  }
+
+  .shadow-toolbar-strong {
+    box-shadow: var(--shadow-toolbar-strong);
+  }
+
+  .ring-focus {
+    --tw-ring-color: var(--color-focus-ring);
+  }
+
+  .divide-subtle > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--color-divider);
+  }
 }
