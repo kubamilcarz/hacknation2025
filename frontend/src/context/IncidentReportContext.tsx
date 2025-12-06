@@ -196,7 +196,7 @@ type InputChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEv
 type TextareaChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEvent<HTMLTextAreaElement>) => void;
 type WitnessInputChangeHandler = (index: number, field: WitnessEditableField) => (event: ChangeEvent<HTMLInputElement>) => void;
 
-type WitnessStatementAttachment = {
+type UploadedAttachment = {
   id: string;
   name: string;
   size: number;
@@ -217,7 +217,10 @@ type IncidentReportContextValue = {
   activeWitnessIndex: number | null;
   downloadState: 'idle' | 'docx' | 'pdf';
   witnesses: CreateDocumentInput['witnesses'];
-  witnessStatements: WitnessStatementAttachment[];
+  witnessStatements: UploadedAttachment[];
+  medicalDocuments: UploadedAttachment[];
+  additionalAttachments: UploadedAttachment[];
+  legalNoticeAttachments: UploadedAttachment[];
   isSubmitting: boolean;
   hasSubmittedSuccessfully: boolean;
   hasNextStep: boolean;
@@ -234,6 +237,12 @@ type IncidentReportContextValue = {
   handleWitnessInputChange: WitnessInputChangeHandler;
   handleWitnessStatementUpload: (files: FileList | File[] | null) => void;
   handleWitnessStatementRemove: (id: string) => void;
+  handleMedicalDocumentUpload: (files: FileList | File[] | null) => void;
+  handleMedicalDocumentRemove: (id: string) => void;
+  handleAdditionalAttachmentUpload: (files: FileList | File[] | null) => void;
+  handleAdditionalAttachmentRemove: (id: string) => void;
+  handleLegalNoticeAttachmentUpload: (files: FileList | File[] | null) => void;
+  handleLegalNoticeAttachmentRemove: (id: string) => void;
   handleDownload: (format: 'docx' | 'pdf') => Promise<void>;
 };
 
@@ -259,7 +268,10 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<'idle' | 'docx' | 'pdf'>('idle');
-  const [witnessStatements, setWitnessStatements] = useState<WitnessStatementAttachment[]>([]);
+  const [witnessStatements, setWitnessStatements] = useState<UploadedAttachment[]>([]);
+  const [medicalDocuments, setMedicalDocuments] = useState<UploadedAttachment[]>([]);
+  const [additionalAttachments, setAdditionalAttachments] = useState<UploadedAttachment[]>([]);
+  const [legalNoticeAttachments, setLegalNoticeAttachments] = useState<UploadedAttachment[]>([]);
   const [preparedDocument, setPreparedDocument] = useState<Document | null>(null);
 
   const currentStep = STEPS[currentStepIndex] ?? STEPS[0];
@@ -474,6 +486,21 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     setActiveWitnessIndex((current) => (current === index ? null : index));
   }, []);
 
+  const createAttachmentFromFile = useCallback((file: File): UploadedAttachment => ({
+    id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+    name: file.name,
+    size: file.size,
+    file,
+    uploadedAt: Date.now(),
+  }), []);
+
+  const updateMedicalDocumentsValidation = useCallback((items: UploadedAttachment[]) => {
+    const errorMessage = items.length === 0 ? 'Dołącz przynajmniej jeden dokument medyczny.' : null;
+    applyValidationResult('accident.medicalDocuments', errorMessage);
+  }, [applyValidationResult]);
+
   const handleWitnessStatementUpload = useCallback((incoming: FileList | File[] | null) => {
     if (!incoming) {
       return;
@@ -485,32 +512,93 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     }
 
     setWitnessStatements((prev) => {
-      const next = [...prev];
-      files.forEach((file) => {
-        const attachment: WitnessStatementAttachment = {
-          id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-          name: file.name,
-          size: file.size,
-          file,
-          uploadedAt: Date.now(),
-        };
-        next.push(attachment);
-      });
+      const next = [...prev, ...files.map(createAttachmentFromFile)];
       return next;
     });
-  }, []);
+  }, [createAttachmentFromFile]);
 
   const handleWitnessStatementRemove = useCallback((id: string) => {
     setWitnessStatements((prev) => prev.filter((attachment) => attachment.id !== id));
   }, []);
 
+  const handleMedicalDocumentUpload = useCallback((incoming: FileList | File[] | null) => {
+    if (!incoming) {
+      return;
+    }
+
+    const files = Array.isArray(incoming) ? incoming : Array.from(incoming);
+    if (files.length === 0) {
+      return;
+    }
+
+    setMedicalDocuments((prev) => {
+      const next = [...prev, ...files.map(createAttachmentFromFile)];
+      updateMedicalDocumentsValidation(next);
+      return next;
+    });
+  }, [createAttachmentFromFile, updateMedicalDocumentsValidation]);
+
+  const handleMedicalDocumentRemove = useCallback((id: string) => {
+    setMedicalDocuments((prev) => {
+      const next = prev.filter((attachment) => attachment.id !== id);
+      updateMedicalDocumentsValidation(next);
+      return next;
+    });
+  }, [updateMedicalDocumentsValidation]);
+
+  const handleAdditionalAttachmentUpload = useCallback((incoming: FileList | File[] | null) => {
+    if (!incoming) {
+      return;
+    }
+
+    const files = Array.isArray(incoming) ? incoming : Array.from(incoming);
+    if (files.length === 0) {
+      return;
+    }
+
+    setAdditionalAttachments((prev) => [...prev, ...files.map(createAttachmentFromFile)]);
+  }, [createAttachmentFromFile]);
+
+  const handleAdditionalAttachmentRemove = useCallback((id: string) => {
+    setAdditionalAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
+  }, []);
+
+  const handleLegalNoticeAttachmentUpload = useCallback((incoming: FileList | File[] | null) => {
+    if (!incoming) {
+      return;
+    }
+
+    const files = Array.isArray(incoming) ? incoming : Array.from(incoming);
+    if (files.length === 0) {
+      return;
+    }
+
+    setLegalNoticeAttachments((prev) => [...prev, ...files.map(createAttachmentFromFile)]);
+  }, [createAttachmentFromFile]);
+
+  const handleLegalNoticeAttachmentRemove = useCallback((id: string) => {
+    setLegalNoticeAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
+  }, []);
+
+  const ensureMedicalDocumentsValid = useCallback(() => {
+    updateMedicalDocumentsValidation(medicalDocuments);
+    return medicalDocuments.length > 0;
+  }, [medicalDocuments, updateMedicalDocumentsValidation]);
+
   const handleValidationGate = useCallback(() => {
+    if (currentStep.id === 'accident') {
+      const attachmentsReady = ensureMedicalDocumentsValid();
+      if (!attachmentsReady) {
+        return false;
+      }
+    }
+
     if (letUserProceedWithEmptyFields) {
       return true;
     }
 
     return validateStepFields(currentStep.id);
-  }, [currentStep.id, validateStepFields]);
+  }, [currentStep.id, ensureMedicalDocumentsValid, validateStepFields]);
 
   const handleSubmit = useCallback(async () => {
     if (submitState === 'success' || submitState === 'submitting') {
@@ -614,6 +702,13 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (targetIndex > currentStepIndex && currentStep.id === 'accident') {
+      const attachmentsReady = ensureMedicalDocumentsValid();
+      if (!attachmentsReady) {
+        return;
+      }
+    }
+
     if (!letUserProceedWithEmptyFields && targetIndex > currentStepIndex) {
       const currentValid = validateStepFields(currentStep.id);
       if (!currentValid) {
@@ -623,11 +718,13 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
 
     setCurrentStepIndex(targetIndex);
     setFurthestStepIndex((previousHighest) => Math.max(previousHighest, targetIndex));
-  }, [currentStep.id, currentStepIndex, furthestStepIndex, validateStepFields]);
+  }, [currentStep.id, currentStepIndex, ensureMedicalDocumentsValid, furthestStepIndex, validateStepFields]);
+
+  const hasRequiredAttachments = currentStep.id !== 'accident' || medicalDocuments.length > 0;
 
   const canAdvance = isLastStep
     ? !isSubmitting && !hasSubmittedSuccessfully
-    : hasNextStep && (letUserProceedWithEmptyFields || isStepValid(currentStep.id));
+    : hasNextStep && hasRequiredAttachments && (letUserProceedWithEmptyFields || isStepValid(currentStep.id));
 
   const value: IncidentReportContextValue = {
     steps: STEPS,
@@ -643,6 +740,9 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     downloadState,
     witnesses,
     witnessStatements,
+    medicalDocuments,
+    additionalAttachments,
+    legalNoticeAttachments,
     isSubmitting,
     hasSubmittedSuccessfully,
     hasNextStep,
@@ -659,6 +759,12 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     handleWitnessInputChange,
     handleWitnessStatementUpload,
     handleWitnessStatementRemove,
+    handleMedicalDocumentUpload,
+    handleMedicalDocumentRemove,
+    handleAdditionalAttachmentUpload,
+    handleAdditionalAttachmentRemove,
+    handleLegalNoticeAttachmentUpload,
+    handleLegalNoticeAttachmentRemove,
     handleDownload,
   };
 
