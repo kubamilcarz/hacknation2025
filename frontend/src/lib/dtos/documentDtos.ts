@@ -1,5 +1,6 @@
-export interface Witness {
+export interface WitnessDto {
   id?: number;
+  documentId?: number | null;
   imie: string;
   nazwisko: string;
   ulica: string;
@@ -8,10 +9,9 @@ export interface Witness {
   miejscowosc: string;
   kod_pocztowy: string;
   nazwa_panstwa: string | null;
-  document: number | Document | null;
 }
 
-export interface Document {
+export interface DocumentListItemDto {
   id?: number;
   pesel: string;
   nr_dowodu: string;
@@ -87,5 +87,19 @@ export interface Document {
   opis_maszyn: string | null;
   czy_maszyna_posiada_atest: boolean | null;
   czy_maszyna_w_ewidencji: boolean | null;
-  witnesses?: Witness[];
+  witnesses?: WitnessDto[];
 }
+
+export type DocumentDetailDto = DocumentListItemDto;
+
+export interface DocumentListResponseDto {
+  items: DocumentListItemDto[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export type CreateDocumentDto = Partial<Omit<DocumentDetailDto, "id" | "witnesses">> & {
+  witnesses?: WitnessDto[];
+};

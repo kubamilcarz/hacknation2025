@@ -1,4 +1,6 @@
 import { defaultDocumentData, mockDocuments } from "../mock-documents";
+import type { CreateDocumentDto, DocumentDetailDto, DocumentListResponseDto } from "@/lib/dtos/documentDtos";
+import { mapDocumentDetailDtoToDocument, mapDocumentListItemDtoToDocument, mapDocumentToDetailDto, mapPartialDocumentToCreateDto } from "@/lib/mappers/documentMapper";
 import type { Document } from "@/types/document";
 
 export type DocumentExportFormat = "csv" | "excel" | "json" | "pdf";
@@ -7,11 +9,6 @@ const EXPORT_FILE_PREFIX = "dokumenty-wypadkowe";
 const NETWORK_DELAY_MS = 350;
 
 const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_MS));
-
-const cloneDocument = (input: Document): Document => ({
-  ...input,
-  witnesses: input.witnesses?.map((witness) => ({ ...witness })) ?? [],
-});
 
 type ExportColumn = { label: string; accessor: (document: Document) => string };
 
@@ -396,13 +393,50 @@ export interface DocumentService {
   setExportFormat(format: DocumentExportFormat): void;
 }
 
-class MockDocumentService implements DocumentService {
-  private documents: Document[];
+interface DocumentApi {
+  list(options?: DocumentListOptions): Promise<DocumentListResponseDto>;
+  getById(id: number): Promise<DocumentDetailDto | null>;
+  create(payload: CreateDocumentDto): Promise<DocumentDetailDto>;
+  setExportFormat(format: DocumentExportFormat): void;
+}
+
+class DefaultDocumentService implements DocumentService {
+  constructor(private readonly api: DocumentApi) {}
+
+  setExportFormat(format: DocumentExportFormat) {
+    this.api.setExportFormat(format);
+  }
+
+  async list(options?: DocumentListOptions): Promise<DocumentListResponse> {
+    const responseDto = await this.api.list(options);
+    return {
+      items: responseDto.items.map(mapDocumentListItemDtoToDocument),
+      totalCount: responseDto.totalCount,
+      totalPages: responseDto.totalPages,
+      page: responseDto.page,
+      pageSize: responseDto.pageSize,
+    } satisfies DocumentListResponse;
+  }
+
+  async getById(id: number): Promise<Document | null> {
+    const dto = await this.api.getById(id);
+    return dto ? mapDocumentDetailDtoToDocument(dto) : null;
+  }
+
+  async create(payload: CreateDocumentInput): Promise<Document> {
+    const dtoPayload = mapPartialDocumentToCreateDto(payload);
+    const createdDto = await this.api.create(dtoPayload);
+    return mapDocumentDetailDtoToDocument(createdDto);
+  }
+}
+
+class MockDocumentApi implements DocumentApi {
+  private documents: DocumentDetailDto[];
   private pendingExportFormat: DocumentExportFormat | null = null;
   private nextId: number;
 
   constructor(seed: Document[]) {
-    this.documents = seed.map(cloneDocument);
+    this.documents = seed.map((document) => this.cloneDto(mapDocumentToDetailDto(document)));
     this.nextId = this.calculateNextId();
   }
 
@@ -416,7 +450,7 @@ class MockDocumentService implements DocumentService {
     return format;
   }
 
-  async list(options?: DocumentListOptions): Promise<DocumentListResponse> {
+  async list(options?: DocumentListOptions): Promise<DocumentListResponseDto> {
     await delay();
 
     const sortField: DocumentListSortField = options?.sort && this.isSortableField(options.sort)
@@ -479,15 +513,15 @@ class MockDocumentService implements DocumentService {
     const totalPages = Math.max(1, Math.ceil(totalCount / normalizedPageSize));
     const safePage = Math.min(normalizedPage, totalPages);
     const startIndex = (safePage - 1) * normalizedPageSize;
-    const paged = sorted.slice(startIndex, startIndex + normalizedPageSize).map(cloneDocument);
+    const paged = sorted.slice(startIndex, startIndex + normalizedPageSize).map((document) => this.cloneDto(document));
 
-    const response: DocumentListResponse = {
+    const response: DocumentListResponseDto = {
       items: paged,
       totalCount,
       totalPages,
       page: safePage,
       pageSize: normalizedPageSize,
-    };
+    } satisfies DocumentListResponseDto;
 
     const format = this.consumeExportFormat();
     if (!format || (format === "csv" && typeof document === "undefined")) {
@@ -495,39 +529,51 @@ class MockDocumentService implements DocumentService {
     }
 
     this.handleExport(format, sorted);
-    return { ...response, items: [] };
+    return { ...response, items: [] } satisfies DocumentListResponseDto;
   }
 
-  async getById(id: number) {
+  async getById(id: number): Promise<DocumentDetailDto | null> {
     await delay();
     const found = this.documents.find((document) => document.id === id);
-    return found ? cloneDocument(found) : null;
+    return found ? this.cloneDto(found) : null;
   }
 
-  async create(payload: CreateDocumentInput) {
+  async create(payload: CreateDocumentDto): Promise<DocumentDetailDto> {
     await delay();
     const newId = this.generateId();
-    const newDocument: Document = {
-      ...defaultDocumentData,
-      ...payload,
+    const { witnesses: payloadWitnesses, ...restPayload } = payload;
+
+    const base = mapDocumentToDetailDto(defaultDocumentData);
+    const newDocument: DocumentDetailDto = {
+      ...base,
+      ...restPayload,
       id: newId,
-      witnesses: payload.witnesses?.map((witness) => ({ ...witness, document: newId })) ?? [],
+      witnesses:
+        payloadWitnesses && payloadWitnesses.length > 0
+          ? payloadWitnesses.map((witness) => ({
+              ...witness,
+              documentId: witness.documentId ?? newId,
+              id: witness.id,
+            }))
+          : undefined,
     };
 
-    this.documents = [newDocument, ...this.documents];
-    return cloneDocument(newDocument);
+    const storedDocument = this.cloneDto(newDocument);
+    this.documents = [storedDocument, ...this.documents];
+    return this.cloneDto(storedDocument);
   }
 
-  private handleExport(format: DocumentExportFormat, documents: Document[]) {
+  private handleExport(format: DocumentExportFormat, documents: DocumentDetailDto[]) {
+    const domainDocuments = documents.map(mapDocumentDetailDtoToDocument);
     switch (format) {
       case "excel":
-        downloadExcel(documents);
+        downloadExcel(domainDocuments);
         break;
       case "json":
-        downloadJson(documents);
+        downloadJson(domainDocuments);
         break;
       case "pdf":
-        downloadPdf(documents);
+        downloadPdf(domainDocuments);
         break;
       default:
         break;
@@ -538,7 +584,7 @@ class MockDocumentService implements DocumentService {
     return ["id", "imie", "nazwisko", "pesel", "data_wypadku", "miejsce_wypadku"].includes(field as DocumentListSortField);
   }
 
-  private getComparableValue(document: Document, field: DocumentListSortField) {
+  private getComparableValue(document: DocumentDetailDto, field: DocumentListSortField) {
     switch (field) {
       case "id":
         return document.id ?? null;
@@ -572,6 +618,13 @@ class MockDocumentService implements DocumentService {
     const id = this.nextId;
     this.nextId += 1;
     return id;
+  }
+
+  private cloneDto(document: DocumentDetailDto): DocumentDetailDto {
+    return {
+      ...document,
+      witnesses: document.witnesses?.map((witness) => ({ ...witness })),
+    } satisfies DocumentDetailDto;
   }
 }
 
@@ -1017,6 +1070,7 @@ function buildTablePageStream({
     commands.push(`<${footerLeftText}> Tj`);
   }
   commands.push("ET");
+  commands.push("0.36 0.4 0.46 rg");
   commands.push("BT");
   commands.push("/F1 9 Tf");
   const footerRightX = tableStartX + tableWidth - 120;
@@ -1153,11 +1207,11 @@ function downloadBlob(blob: Blob, extension: string) {
 const useMock = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
 
 const documentService: DocumentService = (() => {
-  if (useMock) {
-    return new MockDocumentService(mockDocuments);
-  }
+  const api: DocumentApi = useMock
+    ? new MockDocumentApi(mockDocuments)
+    : new MockDocumentApi(mockDocuments);
 
-  return new MockDocumentService(mockDocuments);
+  return new DefaultDocumentService(api);
 })();
 
 export { documentService };
