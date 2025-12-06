@@ -15,14 +15,11 @@ import type {
   DocumentListOptions,
   DocumentListResponse,
 } from "@/lib/services/documentService";
-import {
-  type CaseDocument,
-  type CreateDocumentInput,
-  type UpdateDocumentInput,
-} from "@/types/case-document";
+import type { CreateDocumentInput } from "@/lib/services/documentService";
+import type { Document } from "@/types/document";
 
 interface DocumentContextValue {
-  documents: CaseDocument[];
+  documents: Document[];
   totalCount: number;
   totalPages: number;
   page: number;
@@ -32,15 +29,14 @@ interface DocumentContextValue {
   error: string | null;
   loadDocuments: (options?: DocumentListOptions) => Promise<DocumentListResponse | null>;
   refresh: () => Promise<void>;
-  createDocument: (payload: CreateDocumentInput) => Promise<CaseDocument>;
-  updateDocument: (id: string, payload: UpdateDocumentInput) => Promise<CaseDocument>;
-  getDocumentById: (id: string) => CaseDocument | undefined;
+  createDocument: (payload: CreateDocumentInput) => Promise<Document>;
+  getDocumentById: (id: number) => Document | undefined;
 }
 
 const DocumentContext = createContext<DocumentContextValue | null>(null);
 
 export function DocumentProvider({ children }: { children: ReactNode }) {
-  const [documents, setDocuments] = useState<CaseDocument[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
@@ -116,19 +112,8 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     }
   }, [loadDocuments]);
 
-  const updateDocument = useCallback(async (id: string, payload: UpdateDocumentInput) => {
-    try {
-      const updated = await documentService.update(id, payload);
-      await loadDocuments();
-      return updated;
-    } catch (err) {
-      console.error(err);
-      throw new Error("Nie udało się zaktualizować dokumentu.");
-    }
-  }, [loadDocuments]);
-
   const getDocumentById = useCallback(
-    (id: string) => documents.find((document) => document.documentId === id),
+    (id: number) => documents.find((document) => document.id === id),
     [documents]
   );
 
@@ -147,7 +132,6 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         await loadDocuments();
       },
       createDocument,
-      updateDocument,
       getDocumentById,
     }),
     [
@@ -161,7 +145,6 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       error,
       loadDocuments,
       createDocument,
-      updateDocument,
       getDocumentById,
     ]
   );

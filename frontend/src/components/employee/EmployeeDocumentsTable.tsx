@@ -3,18 +3,17 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Pagination } from "@/components/Pagination";
 import { Spinner } from "@/components/Spinner";
-import type { CaseDocument } from "@/types/case-document";
+import type { Document } from "@/types/document";
 import type { DocumentListOptions } from "@/lib/services/documentService";
-import { DOCUMENT_PRIORITY_LABELS, DOCUMENT_STATUS_LABELS } from "@/lib/constants/documents";
 
 const MIN_COLUMN_WIDTH = 140;
-const TEXT_COLUMN_IDS = new Set(["caseNumber", "injured", "miejsce_wypadku", "rodzaj_urazow"]);
+const TEXT_COLUMN_IDS = new Set(["id", "nazwisko", "pesel", "miejsce_wypadku", "rodzaj_urazow"]);
 
 type ColumnDefinition = {
   id: string;
   label: string;
   minWidth?: number;
-  render: (document: CaseDocument) => ReactNode;
+  render: (document: Document) => ReactNode;
   cellClassName?: string;
   align?: "left" | "right";
   sortable?: boolean;
@@ -28,12 +27,11 @@ export type SortConfig = { columnId: DocumentListOptions["sort"]; direction: "as
 
 const SORTABLE_COLUMNS: Array<{ id: DocumentListOptions["sort"]; defaultDirection: "asc" | "desc" }> = [
   { id: "data_wypadku", defaultDirection: "desc" },
-  { id: "caseNumber", defaultDirection: "asc" },
-  { id: "injuredName", defaultDirection: "asc" },
-  { id: "reporterName", defaultDirection: "asc" },
+  { id: "id", defaultDirection: "asc" },
+  { id: "imie", defaultDirection: "asc" },
+  { id: "nazwisko", defaultDirection: "asc" },
+  { id: "pesel", defaultDirection: "asc" },
   { id: "miejsce_wypadku", defaultDirection: "asc" },
-  { id: "priority", defaultDirection: "asc" },
-  { id: "status", defaultDirection: "asc" },
 ];
 
 const SORTABLE_COLUMN_MAP = SORTABLE_COLUMNS.reduce<Record<string, { defaultDirection: "asc" | "desc" }>>(
@@ -61,7 +59,7 @@ export function getEmployeeColumnDefaultDirection(columnId: DocumentListOptions[
 }
 
 type EmployeeDocumentsTableProps = {
-  documents: CaseDocument[];
+  documents: Document[];
   totalCount: number;
   isLoading: boolean;
   hasLoaded: boolean;
@@ -73,7 +71,7 @@ type EmployeeDocumentsTableProps = {
   onPageChange: (page: number) => void;
   pageSize: number;
   formatDate: (input: Date) => string;
-  onNavigateToDocument: (documentId: string) => void;
+  onNavigateToDocument: (documentId: number) => void;
 };
 
 export default function EmployeeDocumentsTable({
@@ -94,206 +92,78 @@ export default function EmployeeDocumentsTable({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
     ({
       detailsToggle: 48,
-      caseNumber: 160,
-      injured: 220,
+      id: 100,
+      nazwisko: 220,
+      pesel: 160,
       miejsce_wypadku: 220,
       rodzaj_urazow: 220,
-      data_wypadku: 150,
-      priority: 150,
-      status: 150,
+      data_wypadku: 160,
       actions: 124,
     }) satisfies Record<string, number>
   );
   const [isResizing, setIsResizing] = useState(false);
   const resizeStylesRef = useRef<{ userSelect: string; cursor: string } | null>(null);
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
-  const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const getStatusBadge = useCallback((status: CaseDocument["status"]) => {
-    const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium";
-    const styles: Record<CaseDocument["status"], string> = {
-      pending: "bg-(--color-warning-soft) text-(--color-warning)",
-      "in-progress": "bg-(--color-info-soft) text-(--color-info)",
-      resolved: "bg-(--color-success-soft) text-(--color-success)",
-      rejected: "bg-(--color-error-soft) text-(--color-error)",
-    };
-
-    return <span className={`${base} ${styles[status]}`}>{DOCUMENT_STATUS_LABELS[status]}</span>;
-  }, []);
-
-  const getPriorityBadge = useCallback((priority: CaseDocument["priority"]) => {
-    const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium";
-    const styles: Record<CaseDocument["priority"], string> = {
-      low: "bg-(--color-support-soft) text-(--color-support)",
-      medium: "bg-(--color-info-soft) text-(--color-info)",
-      high: "bg-(--color-warning-soft) text-(--color-warning)",
-      critical: "bg-(--color-error-soft) text-(--color-error)",
-    };
-
-    return <span className={`${base} ${styles[priority]}`}>{DOCUMENT_PRIORITY_LABELS[priority]}</span>;
-  }, []);
-
-  const closeActionMenu = useCallback(() => {
-    setOpenActionMenuId(null);
-  }, []);
-
-  const toggleActionMenu = useCallback((documentId: string) => {
-    setOpenActionMenuId((current) => (current === documentId ? null : documentId));
-  }, []);
-
-  const toggleRowExpansion = useCallback((documentId: string) => {
+  const toggleRowExpansion = useCallback((rawDocumentId: number | string) => {
+    const documentKey = String(rawDocumentId);
     setExpandedRows((current) => ({
       ...current,
-      [documentId]: !current[documentId],
+      [documentKey]: !current[documentKey],
     }));
   }, []);
 
-  useEffect(() => {
-    if (!openActionMenuId) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node)) {
-        return;
-      }
-
-      const currentRoot = actionMenuRefs.current[openActionMenuId];
-      if (currentRoot && !currentRoot.contains(event.target)) {
-        setOpenActionMenuId(null);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpenActionMenuId(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [openActionMenuId]);
-
-  const renderActionsCell = useCallback(
-    (documentRow: CaseDocument) => {
-      const isOpen = openActionMenuId === documentRow.documentId;
-
-      return (
-        <div
-          ref={(node) => {
-            if (node) {
-              actionMenuRefs.current[documentRow.documentId] = node;
-            } else {
-              delete actionMenuRefs.current[documentRow.documentId];
-            }
-          }}
-          className="relative flex items-center justify-end gap-2"
-        >
-          <button
-            type="button"
-            onClick={() => toggleActionMenu(documentRow.documentId)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-subtle text-muted transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-            aria-haspopup="menu"
-            aria-expanded={isOpen}
-            aria-label={`Dostępne działania dla dokumentu ${documentRow.caseNumber}`}
-          >
-            <svg
-              className="h-5 w-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="5" cy="12" r="1" />
-              <circle cx="12" cy="12" r="1" />
-              <circle cx="19" cy="12" r="1" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onNavigateToDocument(documentRow.documentId);
-              closeActionMenu();
-            }}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-transparent bg-(--color-accent-soft) text-(--color-accent) transition hover:bg-(--color-accent) hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-            aria-label={`Przejdź do dokumentu ${documentRow.caseNumber}`}
-          >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14" />
-              <path d="m13 6 6 6-6 6" />
-            </svg>
-          </button>
-
-          {isOpen && (
-            <div className="absolute right-0 top-12 z-50 w-48 rounded-lg border border-subtle bg-surface p-1 text-sm shadow-lg">
-              <button
-                type="button"
-                onClick={closeActionMenu}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-secondary transition hover:bg-(--color-surface-subdued) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring)"
-              >
-                <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-(--color-success)" aria-hidden="true" />
-                Oznacz jako rozpatrzony
-              </button>
-              <button
-                type="button"
-                onClick={closeActionMenu}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-secondary transition hover:bg-(--color-surface-subdued) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring)"
-              >
-                <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-(--color-warning)" aria-hidden="true" />
-                Przypisz analityka
-              </button>
-              <button
-                type="button"
-                onClick={closeActionMenu}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-secondary transition hover:bg-(--color-surface-subdued) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring)"
-              >
-                <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-(--color-info)" aria-hidden="true" />
-                Dodaj notatkę
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    },
-    [closeActionMenu, onNavigateToDocument, openActionMenuId, toggleActionMenu]
-  );
 
   const columns = useMemo<ColumnDefinition[]>(
     () => [
       {
-        id: "caseNumber",
-        label: "Numer sprawy",
-        minWidth: 160,
+        id: "detailsToggle",
+        label: "",
+        minWidth: 48,
+        width: 48,
+        sticky: "left",
+        align: "center",
+        resizable: false,
+        render: (documentRow) => {
+          const key = String(documentRow.id ?? documentRow.pesel);
+          const isExpanded = expandedRows[key] ?? false;
+          return (
+            <button
+              type="button"
+              aria-label={isExpanded ? "Ukryj szczegóły dokumentu" : "Pokaż szczegóły dokumentu"}
+              aria-expanded={isExpanded}
+              onClick={() => toggleRowExpansion(key)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-subtle text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+            >
+              {isExpanded ? "−" : "+"}
+            </button>
+          );
+        },
+      },
+      {
+        id: "id",
+        label: "ID",
+        minWidth: 100,
         cellClassName: "font-semibold text-secondary",
-        render: (documentRow) => <span className="block truncate">{documentRow.caseNumber}</span>,
+        render: (documentRow) => <span className="block truncate">{documentRow.id ?? "—"}</span>,
         sortable: true,
         defaultSortDirection: "asc",
         sticky: "left",
       },
       {
-        id: "injured",
+        id: "nazwisko",
         label: "Poszkodowany",
         minWidth: 220,
         cellClassName: "text-primary",
         render: (documentRow) => <span className="block truncate">{`${documentRow.imie} ${documentRow.nazwisko}`.trim()}</span>,
+        sortable: true,
+        defaultSortDirection: "asc",
+      },
+      {
+        id: "pesel",
+        label: "PESEL",
+        minWidth: 160,
+        render: (documentRow) => <span className="block truncate">{documentRow.pesel}</span>,
         sortable: true,
         defaultSortDirection: "asc",
       },
@@ -312,33 +182,16 @@ export default function EmployeeDocumentsTable({
         minWidth: 220,
         cellClassName: "text-secondary",
         render: (documentRow) => <span className="block truncate">{documentRow.rodzaj_urazow}</span>,
-        sortable: true,
-        defaultSortDirection: "asc",
       },
       {
         id: "data_wypadku",
         label: "Data wypadku",
-        minWidth: 150,
+        minWidth: 160,
         cellClassName: "text-secondary",
-        render: (documentRow) => formatDate(new Date(documentRow.data_wypadku)),
+        render: (documentRow) =>
+          formatDate(new Date(`${documentRow.data_wypadku}T${documentRow.godzina_wypadku || "00:00"}`)),
         sortable: true,
         defaultSortDirection: "desc",
-      },
-      {
-        id: "priority",
-        label: "Priorytet",
-        minWidth: 150,
-        render: (documentRow) => getPriorityBadge(documentRow.priority),
-        sortable: true,
-        defaultSortDirection: "asc",
-      },
-      {
-        id: "status",
-        label: "Status",
-        minWidth: 150,
-        render: (documentRow) => getStatusBadge(documentRow.status),
-        sortable: true,
-        defaultSortDirection: "asc",
       },
       {
         id: "actions",
@@ -348,10 +201,27 @@ export default function EmployeeDocumentsTable({
         sticky: "right",
         align: "right",
         resizable: false,
-        render: renderActionsCell,
+        render: (documentRow) => (
+          <button
+            type="button"
+            onClick={() => {
+              if (documentRow.id != null) {
+                onNavigateToDocument(documentRow.id);
+              }
+            }}
+            disabled={documentRow.id == null}
+            className={`inline-flex items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${
+              documentRow.id == null
+                ? 'cursor-not-allowed border-(--color-border) text-muted'
+                : 'border-subtle text-secondary hover:border-(--color-border-stronger) hover:text-foreground'
+            }`}
+          >
+            Szczegóły
+          </button>
+        ),
       },
     ],
-    [formatDate, getPriorityBadge, getStatusBadge, renderActionsCell]
+    [expandedRows, formatDate, onNavigateToDocument, toggleRowExpansion]
   );
 
   useEffect(() => {
@@ -375,6 +245,91 @@ export default function EmployeeDocumentsTable({
 
     return undefined;
   }, [isResizing]);
+
+  const formatDetailLabel = useCallback((key: string) => {
+    return key
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  }, []);
+
+  const formatDetailValue = useCallback((value: unknown) => {
+    if (value === null || value === undefined || value === "") {
+      return "Brak danych";
+    }
+
+    if (value instanceof Date) {
+      return formatDate(value);
+    }
+
+    if (typeof value === "boolean") {
+      return value ? "Tak" : "Nie";
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return "Brak danych";
+      }
+
+      return value
+        .map((entry) => (typeof entry === "object" ? JSON.stringify(entry, null, 2) : String(entry)))
+        .join("\n");
+    }
+
+    if (typeof value === "object") {
+      return JSON.stringify(value, null, 2);
+    }
+
+    return String(value);
+  }, [formatDate]);
+
+  const renderDetailsRow = useCallback(
+    (documentRow: Document) => {
+      const documentKey = String(documentRow.id ?? documentRow.pesel);
+      const entries = Object.entries(documentRow)
+        .filter(([key]) => key !== "witnesses")
+        .map(([key, value]) => ({
+          key,
+          label: formatDetailLabel(key),
+          value: formatDetailValue(value),
+        }));
+
+      const witnesses = documentRow.witnesses ?? [];
+
+      return (
+        <tr className="bg-surface-subdued">
+          <td colSpan={columns.length} className="px-6 py-5 text-sm text-secondary">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {entries.map((entry) => (
+                <div key={`${documentKey}-${entry.key}`} className="rounded border border-subtle bg-surface px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">{entry.label}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-primary">{entry.value}</p>
+                </div>
+              ))}
+            </div>
+            {witnesses.length > 0 && (
+              <div className="mt-6 rounded border border-dashed border-subtle px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Świadkowie</p>
+                <ul className="mt-3 space-y-2 text-sm text-primary">
+                  {witnesses.map((witness, index) => (
+                    <li key={`${documentKey}-witness-${index}`} className="rounded bg-surface-subdued px-3 py-2">
+                      <span className="font-semibold text-secondary">{`${witness.imie} ${witness.nazwisko}`}</span>
+                      <br />
+                      <span className="text-xs text-muted">
+                        {[witness.ulica, witness.nr_domu, witness.nr_lokalu].filter(Boolean).join(" ")},{" "}
+                        {witness.kod_pocztowy} {witness.miejscowosc}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </td>
+        </tr>
+      );
+    },
+    [columns.length, formatDetailLabel, formatDetailValue]
+  );
 
   const getColumnWidth = useCallback(
     (columnId: string, fallback: number) => columnWidths[columnId] ?? fallback,
@@ -547,10 +502,10 @@ export default function EmployeeDocumentsTable({
                       : column.sticky === "right"
                         ? "sticky right-0"
                         : "";
-                  const fallbackVisibilityClass =
-                    isFallbackState && column.id !== "caseNumber" && column.id !== "actions"
-                      ? "hidden sm:table-cell"
-                      : "";
+                        const fallbackVisibilityClass =
+                          isFallbackState && column.id !== "id" && column.id !== "actions"
+                            ? "hidden sm:table-cell"
+                            : "";
                   const headerStyle: CSSProperties = {
                     zIndex: column.sticky ? 10 : undefined,
                     background: column.sticky ? "var(--color-surface-subdued)" : undefined,
@@ -620,48 +575,51 @@ export default function EmployeeDocumentsTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle bg-surface">
-              {documents.map((documentRow) => (
-                <tr key={documentRow.documentId} className="transition hover:bg-surface-subdued">
-                  {columns.map((column) => {
-                    const width = isFallbackState ? undefined : getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
-                    const stickyClassName =
-                      column.sticky === "left"
-                        ? "sticky left-0"
-                        : column.sticky === "right"
-                          ? "sticky right-0"
-                          : "";
-                    const isTextColumn = TEXT_COLUMN_IDS.has(column.id);
-                    const alignmentClass = column.align === "right" ? "text-right" : "text-left";
-                    const isActionsColumn = column.id === "actions";
-                    const isMenuOpenForRow = isActionsColumn && openActionMenuId === documentRow.documentId;
-                    const baseZIndex = column.sticky ? 5 : undefined;
-                    const cellZIndex = isMenuOpenForRow ? 80 : baseZIndex;
-                    const fallbackVisibilityClass =
-                      isFallbackState && column.id !== "caseNumber" && column.id !== "actions"
-                        ? "hidden sm:table-cell"
-                        : "";
-                    const cellStyle: CSSProperties = {
-                      zIndex: cellZIndex,
-                      background: column.sticky ? "var(--color-surface)" : undefined,
-                    };
-                    if (width != null) {
-                      cellStyle.width = width;
-                      cellStyle.minWidth = width;
-                    }
-                    return (
-                      <td
-                        key={`${documentRow.documentId}-${column.id}`}
-                        className={`px-3 py-3 ${alignmentClass} ${stickyClassName} ${fallbackVisibilityClass} ${column.cellClassName ?? ""} ${
-                          isTextColumn ? "overflow-hidden whitespace-nowrap" : ""
-                        }`.trim()}
-                        style={cellStyle}
-                      >
-                        {column.render(documentRow)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {documents.map((documentRow) => {
+                const documentKey = String(documentRow.id ?? documentRow.pesel);
+                const isExpanded = expandedRows[documentKey] ?? false;
+                return (
+                  <Fragment key={documentKey}>
+                    <tr className="transition hover:bg-surface-subdued">
+                      {columns.map((column) => {
+                        const width = isFallbackState ? undefined : getColumnWidth(column.id, column.minWidth ?? MIN_COLUMN_WIDTH);
+                        const stickyClassName =
+                          column.sticky === "left"
+                            ? "sticky left-0"
+                            : column.sticky === "right"
+                              ? "sticky right-0"
+                              : "";
+                        const isTextColumn = TEXT_COLUMN_IDS.has(column.id);
+                        const alignmentClass = column.align === "right" ? "text-right" : "text-left";
+                        const fallbackVisibilityClass =
+                          isFallbackState && column.id !== "id" && column.id !== "actions"
+                            ? "hidden sm:table-cell"
+                            : "";
+                        const cellStyle: CSSProperties = {
+                          zIndex: column.sticky ? 5 : undefined,
+                          background: column.sticky ? "var(--color-surface)" : undefined,
+                        };
+                        if (width != null) {
+                          cellStyle.width = width;
+                          cellStyle.minWidth = width;
+                        }
+                        return (
+                          <td
+                            key={`${documentKey}-${column.id}`}
+                            className={`px-3 py-3 ${alignmentClass} ${stickyClassName} ${fallbackVisibilityClass} ${column.cellClassName ?? ""} ${
+                              isTextColumn ? "overflow-hidden whitespace-nowrap" : ""
+                            }`.trim()}
+                            style={cellStyle}
+                          >
+                            {column.render(documentRow)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    {isExpanded && renderDetailsRow(documentRow)}
+                  </Fragment>
+                );
+              })}
               {(showEmptyState || showLoadingState || error) && (
                 <tr>
                   <td

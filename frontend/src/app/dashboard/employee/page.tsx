@@ -8,7 +8,6 @@ import {
   documentService,
   type DocumentListOptions,
 } from '@/lib/services/documentService';
-import type { DocumentStatus } from '@/types/case-document';
 import Footer from '@/components/Footer';
 import DashboardHeader from '@/components/employee/DashboardHeader';
 import DocumentFiltersPanel from '@/components/employee/DocumentFiltersPanel';
@@ -19,14 +18,6 @@ import EmployeeDocumentsTable, {
   isEmployeeSortableColumn,
 } from '@/components/employee/EmployeeDocumentsTable';
 import ExportDocumentsModal from '@/components/employee/ExportDocumentsModal';
-import {
-  DOCUMENT_PRIORITY_LABELS,
-  DOCUMENT_STATUS_LABELS,
-  DOCUMENT_STATUS_VALUES,
-} from '@/lib/constants/documents';
-
-const isDocumentStatusValue = (value: string | null): value is DocumentStatus =>
-  value != null && DOCUMENT_STATUS_VALUES.includes(value as DocumentStatus);
 
 const isSortDirectionValue = (value: string | null): value is 'asc' | 'desc' =>
   value === 'asc' || value === 'desc';
@@ -59,10 +50,7 @@ export default function EmployeeDashboard() {
     return 'dokumentów';
   }, [totalCount]);
   const hasDocumentsToExport = totalCount > 0;
-  const statusParam = searchParams.get('status');
-  const initialFilterStatus: DocumentStatus | 'all' = isDocumentStatusValue(statusParam) ? statusParam : 'all';
   const initialSearchTerm = searchParams.get('search') ?? '';
-  const [filterStatus, setFilterStatus] = useState<DocumentStatus | 'all'>(initialFilterStatus);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const searchCommittedValueRef = useRef<string | null>(
     initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
@@ -74,12 +62,9 @@ export default function EmployeeDashboard() {
     router.push('/dashboard/employee/new');
   }, [router]);
 
-  const handleNavigateToDocument = useCallback(
-    (documentId: string) => {
-      router.push(`/dashboard/employee/${documentId}`);
-    },
-    [router]
-  );
+  const handleNavigateToDocument = useCallback((documentId: number) => {
+    router.push(`/dashboard/employee/${documentId}`);
+  }, [router]);
 
   const handleOpenExportModal = useCallback(() => {
     setIsExportModalOpen(true);
@@ -163,13 +148,6 @@ export default function EmployeeDashboard() {
     const searchOption = normalizedSearch.length > 0 ? normalizedSearch : null;
     searchCommittedValueRef.current = searchOption;
 
-    const statusParam = params.get('status');
-    if (statusParam && statusParam !== 'all' && !isDocumentStatusValue(statusParam)) {
-      return;
-    }
-    const resolvedStatus: DocumentStatus | 'all' =
-      statusParam && isDocumentStatusValue(statusParam) ? statusParam : 'all';
-
     const sortParam = params.get('sort');
     const directionParam = params.get('direction');
     const defaultSort = getEmployeeDefaultSortConfig();
@@ -190,7 +168,6 @@ export default function EmployeeDashboard() {
       page: normalizedRequestedPage,
       pageSize: currentPageSize,
       search: searchOption,
-      status: resolvedStatus,
       sort: resolvedSort,
       direction: resolvedDirection,
     };
@@ -271,21 +248,6 @@ export default function EmployeeDashboard() {
     [commitSearchTerm]
   );
 
-  const handleStatusChange = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      const value = event.target.value;
-      const normalized: DocumentStatus | 'all' =
-        value === 'all' ? 'all' : isDocumentStatusValue(value) ? (value as DocumentStatus) : 'all';
-      commitSearchTerm();
-      setFilterStatus(normalized);
-      commitQueryParams({
-        status: normalized === 'all' ? null : normalized,
-        page: null,
-      });
-    },
-    [commitQueryParams, commitSearchTerm]
-  );
-
   useEffect(() => {
     const currentParams = new URLSearchParams(searchParamsString);
     const rawSearchParam = currentParams.get('search');
@@ -312,24 +274,6 @@ export default function EmployeeDashboard() {
     });
   }, [commitQueryParams, searchParamsString]);
 
-
-  useEffect(() => {
-    const nextStatusParam = searchParams.get('status');
-    const normalizedStatus: DocumentStatus | 'all' = isDocumentStatusValue(nextStatusParam)
-      ? nextStatusParam
-      : 'all';
-
-    if (!isDocumentStatusValue(nextStatusParam) && nextStatusParam != null && nextStatusParam !== 'all') {
-      commitQueryParams({ status: normalizedStatus === 'all' ? null : normalizedStatus });
-      return;
-    }
-
-    if (normalizedStatus !== filterStatus) {
-      startTransition(() => {
-        setFilterStatus(normalizedStatus);
-      });
-    }
-  }, [commitQueryParams, filterStatus, searchParams]);
 
   useEffect(() => {
     const sortParam = searchParams.get('sort');
@@ -376,14 +320,15 @@ export default function EmployeeDashboard() {
 
     const formatCsvField = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
     const header = [
-      'Numer sprawy',
-      'Poszkodowany',
+      'ID',
+      'Imię',
+      'Nazwisko',
       'PESEL',
-      'Miejsce wypadku',
-      'Rodzaj urazu',
       'Data wypadku',
-      'Priorytet',
-      'Status',
+      'Godzina wypadku',
+      'Miejsce wypadku',
+      'Rodzaj urazów',
+      'Czy udzielono pomocy',
     ];
 
     const baseOptions = currentQueryOptionsRef.current;
@@ -402,17 +347,16 @@ export default function EmployeeDashboard() {
 
       const rows = dataset
         .map((documentRow) => [
-          documentRow.caseNumber,
-          `${documentRow.imie} ${documentRow.nazwisko}`.trim(),
-          documentRow.pesel ?? '-',
+          documentRow.id ?? '—',
+          documentRow.imie,
+          documentRow.nazwisko,
+          documentRow.pesel,
+          documentRow.data_wypadku,
+          documentRow.godzina_wypadku,
           documentRow.miejsce_wypadku,
           documentRow.rodzaj_urazow,
-          formatDate(new Date(documentRow.data_wypadku)),
-          DOCUMENT_PRIORITY_LABELS[documentRow.priority],
-          DOCUMENT_STATUS_LABELS[documentRow.status],
-        ]
-          .map(formatCsvField)
-          .join(';'));
+          documentRow.czy_udzielona_pomoc ? 'Tak' : 'Nie',
+        ].map(formatCsvField).join(';'));
 
       const csvContent = [header.map(formatCsvField).join(';'), ...rows].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -425,7 +369,7 @@ export default function EmployeeDashboard() {
     } catch (error) {
       console.error('Nie udało się wyeksportować dokumentów.', error);
     }
-  }, [formatDate, totalCount]);
+  }, [totalCount]);
 
   const handleConfirmExport = useCallback(async () => {
     if (isExporting || totalCount === 0) {
@@ -479,8 +423,6 @@ export default function EmployeeDashboard() {
               onSearchChange={handleSearchInputChange}
               onSearchBlur={handleSearchInputBlur}
               onSearchKeyDown={handleSearchInputKeyDown}
-              statusValue={filterStatus}
-              onStatusChange={handleStatusChange}
             />
 
             <EmployeeDocumentsTable

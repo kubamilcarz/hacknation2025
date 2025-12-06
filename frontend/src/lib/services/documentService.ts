@@ -1,107 +1,78 @@
-import { mockDocuments, defaultDocumentData } from "../mock-documents";
-import {
-  type CaseDocument,
-  type CreateDocumentInput,
-  type DocumentStatus,
-  type UpdateDocumentInput,
-} from "@/types/case-document";
-import {
-  DOCUMENT_PRIORITY_LABELS,
-  DOCUMENT_PRIORITY_RANK,
-  DOCUMENT_STATUS_LABELS,
-  DOCUMENT_STATUS_RANK,
-} from "@/lib/constants/documents";
+import { defaultDocumentData, mockDocuments } from "../mock-documents";
+import type { Document } from "@/types/document";
 
 export type DocumentExportFormat = "csv" | "excel" | "json" | "pdf";
 
-const EXPORT_FILE_PREFIX = "lista-dokumentow";
+const EXPORT_FILE_PREFIX = "dokumenty-wypadkowe";
+const NETWORK_DELAY_MS = 350;
 
-function formatDateForExport(date: Date | string) {
-  const instance = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("pl-PL", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(instance);
-}
+const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_MS));
 
-type ExportColumn = {
-  label: string;
-  accessor: (document: CaseDocument) => string;
-};
+const cloneDocument = (input: Document): Document => ({
+  ...input,
+  witnesses: input.witnesses?.map((witness) => ({ ...witness })) ?? [],
+});
 
-const EXPORT_COLUMNS: ExportColumn[] = [
-  { label: "Numer sprawy", accessor: (document) => document.caseNumber },
-  { label: "Poszkodowany", accessor: (document) => `${document.imie} ${document.nazwisko}`.trim() },
-  { label: "PESEL", accessor: (document) => document.pesel ?? "-" },
+const EXPORT_COLUMNS: Array<{ label: string; accessor: (document: Document) => string }> = [
+  { label: "ID", accessor: (document) => String(document.id ?? "-") },
+  { label: "Imię", accessor: (document) => document.imie },
+  { label: "Nazwisko", accessor: (document) => document.nazwisko },
+  { label: "PESEL", accessor: (document) => document.pesel },
+  { label: "Data wypadku", accessor: (document) => document.data_wypadku },
+  { label: "Godzina wypadku", accessor: (document) => document.godzina_wypadku },
   { label: "Miejsce wypadku", accessor: (document) => document.miejsce_wypadku },
-  { label: "Rodzaj urazu", accessor: (document) => document.rodzaj_urazow },
-  { label: "Data wypadku", accessor: (document) => formatDateForExport(document.data_wypadku) },
-  { label: "Status", accessor: (document) => DOCUMENT_STATUS_LABELS[document.status] },
-  { label: "Priorytet", accessor: (document) => DOCUMENT_PRIORITY_LABELS[document.priority] },
+  { label: "Rodzaj urazów", accessor: (document) => document.rodzaj_urazow },
+  { label: "Czy udzielono pomocy", accessor: (document) => (document.czy_udzielona_pomoc ? "Tak" : "Nie") },
 ];
 
-export interface DocumentService {
-  list(options?: DocumentListOptions): Promise<DocumentListResponse>;
-  getById(id: string): Promise<CaseDocument | null>;
-  create(payload: CreateDocumentInput): Promise<CaseDocument>;
-  update(id: string, payload: UpdateDocumentInput): Promise<CaseDocument>;
-  setExportFormat(format: DocumentExportFormat): void;
-}
-
 export type DocumentListSortField =
-  | "createdAt"
-  | "caseNumber"
-  | "injuredName"
-  | "reporterName"
-  | "miejsce_wypadku"
+  | "id"
+  | "imie"
+  | "nazwisko"
+  | "pesel"
   | "data_wypadku"
-  | "priority"
-  | "status";
+  | "miejsce_wypadku";
 
 export interface DocumentListOptions {
   page?: number;
   pageSize?: number;
   search?: string | null;
-  status?: DocumentStatus | "all" | null;
   sort?: DocumentListSortField | null;
   direction?: "asc" | "desc" | null;
 }
 
 export interface DocumentListResponse {
-  items: CaseDocument[];
+  items: Document[];
   totalCount: number;
   totalPages: number;
   page: number;
   pageSize: number;
 }
 
-const NETWORK_DELAY_MS = 350;
+export type CreateDocumentInput = Partial<Document>;
 
-const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_MS));
-
-const cloneDocument = (document: CaseDocument): CaseDocument => ({
-  ...document,
-  createdAt: new Date(document.createdAt),
-  updatedAt: new Date(document.updatedAt),
-  witnesses: document.witnesses?.map((witness) => ({ ...witness })) ?? [],
-});
+export interface DocumentService {
+  list(options?: DocumentListOptions): Promise<DocumentListResponse>;
+  getById(id: number): Promise<Document | null>;
+  create(payload: CreateDocumentInput): Promise<Document>;
+  setExportFormat(format: DocumentExportFormat): void;
+}
 
 class MockDocumentService implements DocumentService {
-  private documents: CaseDocument[];
+  private documents: Document[];
   private pendingExportFormat: DocumentExportFormat | null = null;
+  private nextId: number;
 
-  constructor(seed: CaseDocument[]) {
+  constructor(seed: Document[]) {
     this.documents = seed.map(cloneDocument);
+    this.nextId = this.calculateNextId();
   }
 
   setExportFormat(format: DocumentExportFormat) {
     this.pendingExportFormat = format;
   }
 
-  private consumeExportFormat(): DocumentExportFormat | null {
+  private consumeExportFormat() {
     const format = this.pendingExportFormat;
     this.pendingExportFormat = null;
     return format;
@@ -109,266 +80,142 @@ class MockDocumentService implements DocumentService {
 
   async list(options?: DocumentListOptions): Promise<DocumentListResponse> {
     await delay();
+
     const sortField: DocumentListSortField = options?.sort && this.isSortableField(options.sort)
       ? options.sort
-      : "createdAt";
-    const sortDirection: "asc" | "desc" = options?.direction === "asc" || options?.direction === "desc"
+      : "data_wypadku";
+    const direction: "asc" | "desc" = options?.direction === "asc" || options?.direction === "desc"
       ? options.direction
-      : this.getDefaultDirection(sortField);
+      : sortField === "data_wypadku"
+        ? "desc"
+        : "asc";
 
     const normalizedPageSize = this.normalizePositiveInteger(options?.pageSize, 10);
+    const normalizedPage = this.normalizePositiveInteger(options?.page, 1);
     const searchTerm = options?.search?.trim().toLowerCase() ?? "";
-    const statusFilter = options?.status === "all" ? null : options?.status;
 
     const filtered = this.documents.filter((document) => {
-      if (statusFilter && document.status !== statusFilter) {
-        return false;
-      }
-
       if (!searchTerm) {
         return true;
       }
 
       const haystack = [
-        document.caseNumber,
-        document.title,
-        document.category,
-        document.reporterName,
-        document.reporterEmail,
-        document.reporterPhone ?? "",
         document.imie,
         document.nazwisko,
-        document.pesel ?? "",
+        document.pesel,
         document.miejsce_wypadku,
         document.rodzaj_urazow,
         document.szczegoly_okolicznosci,
+        document.organ_postepowania ?? "",
       ];
 
       return haystack.some((value) => value.toLowerCase().includes(searchTerm));
     });
 
-    const sorted = filtered.slice().sort((a, b) => {
-      const first = this.getComparableValue(a, sortField);
-      const second = this.getComparableValue(b, sortField);
+    const sorted = filtered.slice().sort((first, second) => {
+      const firstValue = this.getComparableValue(first, sortField);
+      const secondValue = this.getComparableValue(second, sortField);
 
-      if (first === second) {
+      if (firstValue === secondValue) {
         return 0;
       }
 
-      if (first == null) {
-        return sortDirection === "asc" ? -1 : 1;
+      if (firstValue == null) {
+        return direction === "asc" ? -1 : 1;
       }
 
-      if (second == null) {
-        return sortDirection === "asc" ? 1 : -1;
+      if (secondValue == null) {
+        return direction === "asc" ? 1 : -1;
       }
 
-      if (typeof first === "number" && typeof second === "number") {
-        return sortDirection === "asc" ? first - second : second - first;
+      if (typeof firstValue === "number" && typeof secondValue === "number") {
+        return direction === "asc" ? firstValue - secondValue : secondValue - firstValue;
       }
 
-      const firstComparable = first instanceof Date ? first.getTime() : first;
-      const secondComparable = second instanceof Date ? second.getTime() : second;
-
-      if (typeof firstComparable === "number" && typeof secondComparable === "number") {
-        return sortDirection === "asc"
-          ? firstComparable - secondComparable
-          : secondComparable - firstComparable;
-      }
-
-      return sortDirection === "asc"
-        ? firstComparable.toString().localeCompare(secondComparable.toString(), "pl")
-        : secondComparable.toString().localeCompare(firstComparable.toString(), "pl");
+      return direction === "asc"
+        ? firstValue.toString().localeCompare(secondValue.toString(), "pl")
+        : secondValue.toString().localeCompare(firstValue.toString(), "pl");
     });
 
     const totalCount = sorted.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / normalizedPageSize));
-    const normalizedPage = this.normalizePositiveInteger(options?.page, 1);
     const safePage = Math.min(normalizedPage, totalPages);
     const startIndex = (safePage - 1) * normalizedPageSize;
-    const pagedItems = sorted
-      .slice(startIndex, startIndex + normalizedPageSize)
-      .map(cloneDocument);
-    const result: DocumentListResponse = {
-      items: pagedItems,
+    const paged = sorted.slice(startIndex, startIndex + normalizedPageSize).map(cloneDocument);
+
+    const response: DocumentListResponse = {
+      items: paged,
       totalCount,
       totalPages,
       page: safePage,
       pageSize: normalizedPageSize,
     };
 
-    const exportFormat = this.consumeExportFormat();
-
-    if (!exportFormat) {
-      return result;
+    const format = this.consumeExportFormat();
+    if (!format || (format === "csv" && typeof document === "undefined")) {
+      return response;
     }
 
-    if (exportFormat === "csv" || typeof document === "undefined") {
-      return result;
-    }
-
-    const exportItems = sorted.map(cloneDocument);
-
-    if (exportItems.length === 0) {
-      return {
-        ...result,
-        items: [],
-      };
-    }
-
-    switch (exportFormat) {
-      case "excel":
-        downloadExcel(exportItems);
-        break;
-      case "json":
-        downloadJson(exportItems);
-        break;
-      case "pdf":
-        downloadPdf(exportItems);
-        break;
-      default:
-        break;
-    }
-
-    return {
-      ...result,
-      items: [],
-    };
+    this.handleExport(format, sorted);
+    return { ...response, items: [] };
   }
 
-  async getById(id: string) {
+  async getById(id: number) {
     await delay();
-    const found = this.documents.find((document) => document.documentId === id);
+    const found = this.documents.find((document) => document.id === id);
     return found ? cloneDocument(found) : null;
   }
 
   async create(payload: CreateDocumentInput) {
     await delay();
-    const now = new Date();
-    const [firstName, ...rest] = payload.reporterName.trim().split(" ");
-    const lastName = rest.join(" ") || firstName;
-    const generatedId = this.generateId();
-
-    const newDocument: CaseDocument = {
+    const newId = this.generateId();
+    const newDocument: Document = {
       ...defaultDocumentData,
-      documentId: generatedId,
-      caseNumber: this.generateCaseNumber(now),
-      title: payload.title,
-      description: payload.description,
-      category: payload.category,
-      priority: payload.priority,
-      status: "pending",
-      reporterName: payload.reporterName,
-      reporterEmail: payload.reporterEmail,
-      reporterPhone: payload.reporterPhone,
-      createdAt: now,
-      updatedAt: now,
-      assignedTo: undefined,
-      notes: undefined,
-      pesel: payload.pesel ?? defaultDocumentData.pesel,
-      nr_dowodu: `GEN${generatedId}`,
-      imie: firstName,
-      nazwisko: lastName,
-      data_urodzenia: defaultDocumentData.data_urodzenia,
-      miejsce_urodzenia: defaultDocumentData.miejsce_urodzenia,
-      numer_telefonu: payload.reporterPhone ?? defaultDocumentData.numer_telefonu,
-      ulica: defaultDocumentData.ulica,
-      nr_domu: defaultDocumentData.nr_domu,
-      nr_lokalu: defaultDocumentData.nr_lokalu,
-      miejscowosc: defaultDocumentData.miejscowosc,
-      kod_pocztowy: defaultDocumentData.kod_pocztowy,
-      data_wypadku: now.toISOString().slice(0, 10),
-      godzina_wypadku: now.toTimeString().slice(0, 5),
-      miejsce_wypadku: payload.category,
-      planowana_godzina_rozpoczecia_pracy: "08:00",
-      planowana_godzina_zakonczenia_pracy: "16:00",
-      rodzaj_urazow: payload.title,
-      szczegoly_okolicznosci: payload.description,
-      czy_udzielona_pomoc: false,
-      miejsce_udzielenia_pomocy: null,
-      organ_postepowania: null,
-      czy_wypadek_podczas_uzywania_maszyny: false,
-      opis_maszyn: null,
-      czy_maszyna_posiada_atest: null,
-      czy_maszyna_w_ewidencji: null,
-      imie_zglaszajacego: firstName,
-      nazwisko_zglaszajacego: lastName,
-      pesel_zglaszajacego: payload.pesel ?? null,
-      nr_dowodu_zglaszajacego: null,
-      data_urodzenia_zglaszajacego: null,
-      nr_telefonu_zglaszajacego: payload.reporterPhone ?? null,
-      ulica_zglaszajacego: defaultDocumentData.ulica,
-      nr_domu_zglaszajacego: defaultDocumentData.nr_domu,
-      nr_lokalu_zglaszajacego: defaultDocumentData.nr_lokalu,
-      miejscowosc_zglaszajacego: defaultDocumentData.miejscowosc,
-      kod_pocztowy_zglaszajacego: defaultDocumentData.kod_pocztowy,
-      ulica_zglaszajacego_ostatniego_zamieszkania: null,
-      nr_domu_zglaszajacego_ostatniego_zamieszkania: null,
-      nr_lokalu_zglaszajacego_ostatniego_zamieszkania: null,
-      miejscowosc_zglaszajacego_ostatniego_zamieszkania: null,
-      kod_pocztowy_zglaszajacego_ostatniego_zamieszkania: null,
-      typ_korespondencji_zglaszajacego: null,
-      ulica_korespondencji_zglaszajacego: null,
-      nr_domu_korespondencji_zglaszajacego: null,
-      nr_lokalu_korespondencji_zglaszajacego: null,
-      miejscowosc_korespondencji_zglaszajacego: null,
-      kod_pocztowy_korespondencji_zglaszajacego: null,
-      nazwa_panstwa_korespondencji_zglaszajacego: null,
-      witnesses: [],
+      ...payload,
+      id: newId,
+      witnesses: payload.witnesses?.map((witness) => ({ ...witness, document: newId })) ?? [],
     };
 
     this.documents = [newDocument, ...this.documents];
     return cloneDocument(newDocument);
   }
 
-  async update(id: string, payload: UpdateDocumentInput) {
-    await delay();
-    const targetIndex = this.documents.findIndex((document) => document.documentId === id);
-    if (targetIndex === -1) {
-      throw new Error("Document not found");
-    }
-
-    const updatedDocument: CaseDocument = {
-      ...this.documents[targetIndex],
-      ...payload,
-      updatedAt: new Date(),
-    };
-
-    this.documents[targetIndex] = updatedDocument;
-    return cloneDocument(updatedDocument);
-  }
-
-  private generateId() {
-    return Math.random().toString(36).slice(2, 8).toUpperCase();
-  }
-
-  private generateCaseNumber(date: Date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const sequence = String(Math.floor(Math.random() * 9000) + 1000).padStart(4, "0");
-    return `${year}/${month}/${sequence}`;
-  }
-
-  private isSortableField(value: string): value is DocumentListSortField {
-    return [
-      "createdAt",
-      "caseNumber",
-      "injuredName",
-      "reporterName",
-      "miejsce_wypadku",
-      "data_wypadku",
-      "priority",
-      "status",
-    ].includes(value as DocumentListSortField);
-  }
-
-  private getDefaultDirection(field: DocumentListSortField): "asc" | "desc" {
-    switch (field) {
-      case "createdAt":
-      case "data_wypadku":
-        return "desc";
+  private handleExport(format: DocumentExportFormat, documents: Document[]) {
+    switch (format) {
+      case "excel":
+        downloadExcel(documents);
+        break;
+      case "json":
+        downloadJson(documents);
+        break;
+      case "pdf":
+        downloadPdf(documents);
+        break;
       default:
-        return "asc";
+        break;
+    }
+  }
+
+  private isSortableField(field: string): field is DocumentListSortField {
+    return ["id", "imie", "nazwisko", "pesel", "data_wypadku", "miejsce_wypadku"].includes(field as DocumentListSortField);
+  }
+
+  private getComparableValue(document: Document, field: DocumentListSortField) {
+    switch (field) {
+      case "id":
+        return document.id ?? null;
+      case "imie":
+        return document.imie;
+      case "nazwisko":
+        return document.nazwisko;
+      case "pesel":
+        return document.pesel;
+      case "miejsce_wypadku":
+        return document.miejsce_wypadku;
+      case "data_wypadku":
+        return document.data_wypadku;
+      default:
+        return null;
     }
   }
 
@@ -379,40 +226,22 @@ class MockDocumentService implements DocumentService {
     return Math.max(1, Math.floor(value));
   }
 
-  private getComparableValue(document: CaseDocument, field: DocumentListSortField) {
-    switch (field) {
-      case "createdAt":
-        return document.createdAt;
-      case "caseNumber":
-        return document.caseNumber;
-      case "injuredName":
-        return `${document.imie} ${document.nazwisko}`.trim();
-      case "reporterName":
-        return document.reporterName;
-      case "miejsce_wypadku":
-        return document.miejsce_wypadku;
-      case "data_wypadku":
-        return new Date(document.data_wypadku);
-      case "priority":
-        return DOCUMENT_PRIORITY_RANK[document.priority];
-      case "status":
-        return DOCUMENT_STATUS_RANK[document.status];
-      default:
-        return document.createdAt;
-    }
+  private calculateNextId() {
+    return (this.documents.reduce((acc, document) => Math.max(acc, document.id ?? 0), 0) || 0) + 1;
+  }
+
+  private generateId() {
+    const id = this.nextId;
+    this.nextId += 1;
+    return id;
   }
 }
 
-function downloadExcel(items: CaseDocument[]) {
-  const headerRow = EXPORT_COLUMNS
-    .map((column) => `<th>${escapeHtml(column.label)}</th>`)
-    .join("");
-
+function downloadExcel(items: Document[]) {
+  const headerRow = EXPORT_COLUMNS.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("");
   const bodyRows = items
     .map((document) => {
-      const cells = EXPORT_COLUMNS
-        .map((column) => `<td>${escapeHtml(column.accessor(document))}</td>`)
-        .join("");
+      const cells = EXPORT_COLUMNS.map((column) => `<td>${escapeHtml(column.accessor(document))}</td>`).join("");
       return `<tr>${cells}</tr>`;
     })
     .join("");
@@ -422,24 +251,20 @@ function downloadExcel(items: CaseDocument[]) {
   downloadBlob(blob, "xls");
 }
 
-function downloadJson(items: CaseDocument[]) {
-  const payload = items.map((document) => ({
-    numerSprawy: document.caseNumber,
-    poszkodowany: `${document.imie} ${document.nazwisko}`.trim(),
-    miejsceWypadku: document.miejsce_wypadku,
-    rodzajUrazu: document.rodzaj_urazow,
-    status: DOCUMENT_STATUS_LABELS[document.status],
-    priorytet: DOCUMENT_PRIORITY_LABELS[document.priority],
-    dataWypadku: formatDateForExport(document.data_wypadku),
-  }));
-
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8;",
+function downloadJson(items: Document[]) {
+  const payload = items.map((document) => {
+    const result: Record<string, string | number | boolean | null> = {};
+    EXPORT_COLUMNS.forEach((column) => {
+      result[column.label] = column.accessor(document);
+    });
+    return result;
   });
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8;" });
   downloadBlob(blob, "json");
 }
 
-function downloadPdf(items: CaseDocument[]) {
+function downloadPdf(items: Document[]) {
   const MAX_COLUMN_WIDTH = 40;
 
   const headerCells = EXPORT_COLUMNS.map((column) => normalizeCellValue(column.label));
