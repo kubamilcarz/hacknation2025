@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background px-6 py-16">
+    <main className="flex min-h-[calc(100vh-6rem)] items-center justify-center bg-background px-6 py-16">
       <section className="w-full max-w-3xl rounded-2xl border border-subtle bg-surface p-10 shadow-toolbar" aria-labelledby="not-found-title">
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-(--color-accent-soft)">
           <span className="text-2xl font-semibold text-(--color-accent-strong)" aria-hidden="true">
