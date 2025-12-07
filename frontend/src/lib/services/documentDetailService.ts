@@ -151,4 +151,11 @@ class DocumentDetailService {
   }
 }
 
-export const documentDetailService = new DocumentDetailService(employeeDocumentService);
+export function createDocumentDetailService(overrides?: Partial<DocumentDetailServiceDependencies>) {
+  return new DocumentDetailService({
+    getById: overrides?.getById ?? ((id) => employeeDocumentService.getById(id)),
+    getOriginalFile: overrides?.getOriginalFile ?? ((id) => employeeDocumentService.getOriginalFile(id)),
+  });
+}
+
+export const documentDetailService = createDocumentDetailService();
