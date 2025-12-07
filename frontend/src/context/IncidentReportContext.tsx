@@ -10,7 +10,7 @@ import {
   witnessFieldKey,
 } from '@/components/user/dashboard/witnesses/utils';
 import { defaultDocumentData } from '@/lib/mock-documents';
-import { documentService, downloadDocumentSummary } from '@/lib/services/documentService';
+import { documentService, downloadDocumentSummary, downloadAnonymizedDocument } from '@/lib/services/documentService';
 import type { CreateDocumentInput } from '@/lib/services/documentService';
 import type { Document } from '@/types/document';
 
@@ -95,6 +95,11 @@ const INCIDENT_FIELD_KEYS = [
   'nazwisko',
   'numer_telefonu',
   'ulica',
+  'nr_domu',
+  'nr_lokalu',
+  'miejscowosc',
+  'kod_pocztowy',
+  'nazwa_panstwa',
   'data_wypadku',
   'godzina_wypadku',
   'miejsce_wypadku',
@@ -110,7 +115,7 @@ type IncidentFieldKey = (typeof INCIDENT_FIELD_KEYS)[number];
 
 const STEP_FIELDS_BY_STEP: Record<IncidentWizardStep['id'], IncidentFieldKey[]> = {
   identity: ['pesel', 'nr_dowodu', 'imie', 'nazwisko', 'numer_telefonu'],
-  residence: ['ulica'],
+  residence: ['ulica', 'nr_domu', 'miejscowosc', 'kod_pocztowy'],
   accident: ['data_wypadku', 'godzina_wypadku', 'miejsce_wypadku', 'rodzaj_urazow', 'szczegoly_okolicznosci'],
   witnesses: [],
   review: [],
@@ -183,6 +188,56 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
     }
     if (normalized.length < 3) {
       return 'Nazwa ulicy powinna mieć co najmniej 3 znaki.';
+    }
+    return null;
+  },
+  nr_domu: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (!/^[0-9A-Za-z/ -]{1,8}$/.test(normalized)) {
+      return 'Podaj numer budynku, możesz dodać literę lub ukośnik (np. 12A lub 4/6).';
+    }
+    return null;
+  },
+  nr_lokalu: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (!/^[0-9A-Za-z/ -]{1,8}$/.test(normalized)) {
+      return 'Numer lokalu powinien składać się z cyfr oraz opcjonalnych liter (np. 8 lub 8B).';
+    }
+    return null;
+  },
+  miejscowosc: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (normalized.length < 2) {
+      return 'Wpisz pełną nazwę miejscowości (minimum 2 znaki).';
+    }
+    return null;
+  },
+  kod_pocztowy: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (!/^\d{2}-\d{3}$/.test(normalized)) {
+      return 'Kod pocztowy powinien mieć format 00-000.';
+    }
+    return null;
+  },
+  nazwa_panstwa: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized.length < 2) {
+      return 'Nazwa państwa powinna mieć co najmniej 2 znaki.';
     }
     return null;
   },
@@ -293,7 +348,7 @@ const incidentFieldKeySet = new Set<IncidentFieldKey>(INCIDENT_FIELD_KEYS);
 const isIncidentFieldKey = (field: keyof CreateDocumentInput): field is IncidentFieldKey =>
   incidentFieldKeySet.has(field as IncidentFieldKey);
 
-const letUserProceedWithEmptyFields = true;
+const letUserProceedWithEmptyFields = false;
 
 const createInitialIncidentDraft = (): CreateDocumentInput => ({
   ...defaultDocumentData,
@@ -304,6 +359,11 @@ const createInitialIncidentDraft = (): CreateDocumentInput => ({
   nazwisko: '',
   numer_telefonu: '',
   ulica: '',
+  nr_domu: '',
+  nr_lokalu: '',
+  miejscowosc: '',
+  kod_pocztowy: '',
+  nazwa_panstwa: 'Polska',
   data_wypadku: '',
   godzina_wypadku: '',
   miejsce_wypadku: '',
@@ -327,6 +387,9 @@ const BACKEND_REQUIRED_STRING_FIELDS = [
   'imie',
   'nazwisko',
   'ulica',
+  'nr_domu',
+  'miejscowosc',
+  'kod_pocztowy',
   'data_wypadku',
   'godzina_wypadku',
   'miejsce_wypadku',
@@ -375,7 +438,7 @@ type IncidentReportContextValue = {
   submitError: string | null;
   submittedDocumentId: number | null;
   activeWitnessIndex: number | null;
-  downloadState: 'idle' | 'docx' | 'pdf';
+  downloadState: 'idle' | 'pdf' | 'anon-pdf';
   witnesses: CreateDocumentInput['witnesses'];
   witnessStatements: UploadedAttachment[];
   medicalDocuments: UploadedAttachment[];
@@ -404,7 +467,8 @@ type IncidentReportContextValue = {
   handleAdditionalAttachmentRemove: (id: string) => void;
   handleLegalNoticeAttachmentUpload: (files: FileList | File[] | null) => void;
   handleLegalNoticeAttachmentRemove: (id: string) => void;
-  handleDownload: (format: 'docx' | 'pdf') => Promise<void>;
+  handleDownload: (format: 'pdf') => Promise<void>;
+  handleDownloadAnonymized: () => Promise<void>;
 };
 
 const IncidentReportContext = createContext<IncidentReportContextValue | undefined>(undefined);
@@ -428,7 +492,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
-  const [downloadState, setDownloadState] = useState<'idle' | 'docx' | 'pdf'>('idle');
+  const [downloadState, setDownloadState] = useState<'idle' | 'pdf' | 'anon-pdf'>('idle');
   const [witnessStatements, setWitnessStatements] = useState<UploadedAttachment[]>([]);
   const [medicalDocuments, setMedicalDocuments] = useState<UploadedAttachment[]>([]);
   const [additionalAttachments, setAdditionalAttachments] = useState<UploadedAttachment[]>([]);
@@ -445,6 +509,11 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     nazwisko: incidentDraft.nazwisko ?? '',
     numer_telefonu: incidentDraft.numer_telefonu ?? '',
     ulica: incidentDraft.ulica ?? '',
+    nr_domu: incidentDraft.nr_domu ?? '',
+    nr_lokalu: incidentDraft.nr_lokalu ?? '',
+    miejscowosc: incidentDraft.miejscowosc ?? '',
+    kod_pocztowy: incidentDraft.kod_pocztowy ?? '',
+    nazwa_panstwa: incidentDraft.nazwa_panstwa ?? '',
     data_wypadku: incidentDraft.data_wypadku ?? '',
     godzina_wypadku: incidentDraft.godzina_wypadku ?? '',
     miejsce_wypadku: incidentDraft.miejsce_wypadku ?? '',
@@ -670,9 +739,9 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     uploadedAt: Date.now(),
   }), []);
 
-  const updateMedicalDocumentsValidation = useCallback((items: UploadedAttachment[]) => {
-    const errorMessage = items.length === 0 ? 'Dołącz przynajmniej jeden dokument medyczny.' : null;
-    applyValidationResult('accident.medicalDocuments', errorMessage);
+  const updateMedicalDocumentsValidation = useCallback(() => {
+    // Dokumenty medyczne są opcjonalne – brak plików nie blokuje przejścia dalej.
+    applyValidationResult('accident.medicalDocuments', null);
   }, [applyValidationResult]);
 
   const handleWitnessStatementUpload = useCallback((incoming: FileList | File[] | null) => {
@@ -707,7 +776,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
 
     setMedicalDocuments((prev) => {
       const next = [...prev, ...files.map(createAttachmentFromFile)];
-      updateMedicalDocumentsValidation(next);
+      updateMedicalDocumentsValidation();
       return next;
     });
   }, [createAttachmentFromFile, updateMedicalDocumentsValidation]);
@@ -715,7 +784,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const handleMedicalDocumentRemove = useCallback((id: string) => {
     setMedicalDocuments((prev) => {
       const next = prev.filter((attachment) => attachment.id !== id);
-      updateMedicalDocumentsValidation(next);
+      updateMedicalDocumentsValidation();
       return next;
     });
   }, [updateMedicalDocumentsValidation]);
@@ -755,16 +824,13 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ensureMedicalDocumentsValid = useCallback(() => {
-    updateMedicalDocumentsValidation(medicalDocuments);
-    return medicalDocuments.length > 0;
-  }, [medicalDocuments, updateMedicalDocumentsValidation]);
+    updateMedicalDocumentsValidation();
+    return true;
+  }, [updateMedicalDocumentsValidation]);
 
   const handleValidationGate = useCallback(() => {
     if (currentStep.id === 'accident') {
-      const attachmentsReady = ensureMedicalDocumentsValid();
-      if (!attachmentsReady) {
-        return false;
-      }
+      ensureMedicalDocumentsValid();
     }
 
     if (letUserProceedWithEmptyFields) {
@@ -829,7 +895,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     }
   }, [incidentDraft, submitState]);
 
-  const handleDownload = useCallback(async (format: 'docx' | 'pdf') => {
+  const handleDownload = useCallback(async (format: 'pdf') => {
     if (submittedDocumentId == null || !preparedDocument) {
       setSubmitError('Najpierw przygotuj formularz, a potem spróbuj pobrania ponownie.');
       return;
@@ -845,6 +911,23 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
       setDownloadState('idle');
     }
   }, [preparedDocument, submittedDocumentId]);
+
+  const handleDownloadAnonymized = useCallback(async () => {
+    if (submittedDocumentId == null) {
+      setSubmitError('Najpierw przygotuj formularz, a potem spróbuj pobrania ponownie.');
+      return;
+    }
+
+    setDownloadState('anon-pdf');
+    try {
+      await downloadAnonymizedDocument(submittedDocumentId);
+    } catch (error) {
+      console.error(error);
+      setSubmitError('Nie udało się pobrać zanonimizowanego pliku. Spróbuj ponownie.');
+    } finally {
+      setDownloadState('idle');
+    }
+  }, [submittedDocumentId]);
 
   const hasNextStep = currentStepIndex < STEPS.length - 1;
   const isLastStep = currentStepIndex === STEPS.length - 1;
@@ -879,10 +962,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     }
 
     if (targetIndex > currentStepIndex && currentStep.id === 'accident') {
-      const attachmentsReady = ensureMedicalDocumentsValid();
-      if (!attachmentsReady) {
-        return;
-      }
+      ensureMedicalDocumentsValid();
     }
 
     if (!letUserProceedWithEmptyFields && targetIndex > currentStepIndex) {
@@ -896,11 +976,9 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     setFurthestStepIndex((previousHighest) => Math.max(previousHighest, targetIndex));
   }, [currentStep.id, currentStepIndex, ensureMedicalDocumentsValid, furthestStepIndex, validateStepFields]);
 
-  const hasRequiredAttachments = currentStep.id !== 'accident' || medicalDocuments.length > 0;
-
   const canAdvance = isLastStep
     ? !isSubmitting && !hasSubmittedSuccessfully
-    : hasNextStep && hasRequiredAttachments && (letUserProceedWithEmptyFields || isStepValid(currentStep.id));
+    : hasNextStep && (letUserProceedWithEmptyFields || isStepValid(currentStep.id));
 
   const value: IncidentReportContextValue = {
     steps: STEPS,
@@ -943,6 +1021,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     handleLegalNoticeAttachmentUpload,
     handleLegalNoticeAttachmentRemove,
     handleDownload,
+    handleDownloadAnonymized,
   };
 
   return (

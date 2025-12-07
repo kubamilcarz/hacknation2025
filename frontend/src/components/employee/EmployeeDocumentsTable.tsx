@@ -234,22 +234,6 @@ export default function EmployeeDocumentsTable({
               type="button"
               onClick={() => {
                 if (documentRow.id != null) {
-                  void onDownloadDocument(documentRow.id);
-                }
-              }}
-              disabled={documentRow.id == null}
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${
-                documentRow.id == null
-                  ? "cursor-not-allowed border-(--color-border) text-muted"
-                  : "border-subtle text-secondary hover:border-(--color-border-stronger) hover:text-foreground"
-              }`}
-            >
-              Pobierz PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (documentRow.id != null) {
                   onNavigateToDocument(documentRow.id);
                 }
               }}
@@ -266,7 +250,7 @@ export default function EmployeeDocumentsTable({
         ),
       },
     ],
-    [expandedRows, formatDate, onDownloadDocument, onNavigateToDocument, toggleRowExpansion]
+    [expandedRows, formatDate, onNavigateToDocument, toggleRowExpansion]
   );
 
   useEffect(() => {

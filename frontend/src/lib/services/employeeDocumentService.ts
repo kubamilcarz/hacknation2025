@@ -8,7 +8,7 @@ import {
   mapEmployeeDocumentDetailDtoToDomain,
   mapEmployeeDocumentListItemDtoToDomain,
 } from "@/lib/mappers/employeeDocumentMapper";
-import type { EmployeeDocument } from "@/types/employeeDocument";
+import type { EmployeeDocument, EmployeeDocumentAssessmentStatus } from "@/types/employeeDocument";
 
 export type EmployeeDocumentExportFormat = "csv" | "excel" | "json" | "pdf";
 
@@ -78,6 +78,7 @@ let pdfFontRegistrationPromise: Promise<Record<string, string>> | null = null;
 
 const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const PDF_UPLOAD_ENDPOINT = "/api/zus-recommendation/";
+const ACCIDENT_CARD_ENDPOINT = "/api/accident-card/pdf/";
 
 export type EmployeeDocumentListSortField = "uploaded_at" | "file_name" | "analysis_status";
 
@@ -104,6 +105,7 @@ export interface EmployeeDocumentService {
   upload(file: File): Promise<EmployeeDocument>;
   downloadOriginal(id: number): Promise<void>;
   downloadAnonymized(id: number): Promise<void>;
+  downloadAccidentCard(id: number): Promise<void>;
   getOriginalFile(id: number): Promise<Blob>;
   getAnonymizedFile(id: number): Promise<Blob>;
   setExportFormat(format: EmployeeDocumentExportFormat): void;
@@ -115,6 +117,7 @@ interface EmployeeDocumentApi {
   upload(payload: CreateEmployeeDocumentDto, fileData: Blob): Promise<EmployeeDocumentDetailDto>;
   downloadOriginal(id: number): Promise<Blob>;
   downloadAnonymized(id: number): Promise<Blob>;
+  generateAccidentCard(payload: Record<string, string>, fileName: string): Promise<Blob>;
   setExportFormat(format: EmployeeDocumentExportFormat): void;
 }
 
@@ -161,6 +164,18 @@ class DefaultEmployeeDocumentService implements EmployeeDocumentService {
     downloadBlobWithName(blob, anonymizedName);
   }
 
+  async downloadAccidentCard(id: number): Promise<void> {
+    const document = await this.getById(id);
+    if (!document) {
+      throw new Error("Nie znaleziono dokumentu o podanym identyfikatorze.");
+    }
+
+    const payload = buildAccidentCardPayload(document);
+    const fileName = buildAccidentCardFileName(document);
+    const blob = await this.api.generateAccidentCard(payload, fileName);
+    downloadBlobWithName(blob, fileName);
+  }
+
   async getOriginalFile(id: number): Promise<Blob> {
     return this.api.downloadOriginal(id);
   }
@@ -181,11 +196,13 @@ class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
   private fileStorage = new Map<number, Blob>();
   private pendingExportFormat: EmployeeDocumentExportFormat | null = null;
   private readonly uploadUrl: string;
+  private readonly accidentCardUrl: string;
 
   constructor(baseUrl: string = DEFAULT_BACKEND_URL) {
     const normalized = baseUrl.trim();
     const effective = normalized.length > 0 ? normalized : DEFAULT_BACKEND_URL;
     this.uploadUrl = buildEndpoint(effective, PDF_UPLOAD_ENDPOINT);
+    this.accidentCardUrl = buildEndpoint(effective, ACCIDENT_CARD_ENDPOINT);
   }
 
   setExportFormat(format: EmployeeDocumentExportFormat) {
@@ -282,7 +299,7 @@ class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
   }
 
   async upload(payload: CreateEmployeeDocumentDto, fileData: Blob): Promise<EmployeeDocumentDetailDto> {
-    const description = await analyzePdfWithBackend(fileData, this.uploadUrl);
+    const description = await analyzePdfWithBackend(fileData, this.uploadUrl, payload.assessment);
     const id = this.generateId();
 
     const dto: EmployeeDocumentDetailDto = {
@@ -292,6 +309,7 @@ class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
       analysis_status: description.status,
       incident_description: description.text,
       description_source: description.source,
+      assessment: description.assessment,
     };
 
     this.documents = [{ ...dto }, ...this.documents];
@@ -314,6 +332,39 @@ class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
     }
     const domainDocument = mapEmployeeDocumentDetailDtoToDomain(dto);
     return createAnonymizedPdf(domainDocument);
+  }
+
+  async generateAccidentCard(payload: Record<string, string>, fileName: string): Promise<Blob> {
+    try {
+      const response = await fetch(this.accidentCardUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ card: payload, filename: fileName }),
+      });
+
+      if (!response.ok) {
+        const errorText = (await response.text().catch(() => "")).trim();
+        throw new Error(
+          errorText.length > 0
+            ? errorText
+            : `Nie udało się wygenerować karty wypadku (kod ${response.status}).`
+        );
+      }
+
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) {
+        throw new Error("Serwer zwrócił pusty plik karty wypadku.");
+      }
+
+      return blob;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Nie udało się połączyć z serwerem tworzenia karty wypadku.");
+    }
   }
 
   private handleExport(format: EmployeeDocumentExportFormat, documents: EmployeeDocument[]) {
@@ -476,17 +527,27 @@ async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDoc
   };
 }
 
+type AssessmentDto = EmployeeDocumentDetailDto["assessment"];
+type AssessmentStatusDto = AssessmentDto["suddenness"]["status"];
+
 type PdfAnalysisResult = {
   text: string;
   status: EmployeeDocumentDetailDto["analysis_status"];
   source: "ai" | "manual";
+  assessment: AssessmentDto;
 };
 
-async function analyzePdfWithBackend(fileData: Blob, uploadUrl: string): Promise<PdfAnalysisResult> {
+async function analyzePdfWithBackend(
+  fileData: Blob,
+  uploadUrl: string,
+  baselineAssessment: AssessmentDto,
+): Promise<PdfAnalysisResult> {
+  const fallbackAssessment = cloneAssessmentDto(baselineAssessment);
   const fallback: PdfAnalysisResult = {
     text: "Nie udało się odczytać opisu z przesłanego pliku. Uzupełnij dane ręcznie.",
     status: "failed",
     source: "manual",
+    assessment: fallbackAssessment,
   };
 
   const formData = new FormData();
@@ -514,16 +575,242 @@ async function analyzePdfWithBackend(fileData: Blob, uploadUrl: string): Promise
       };
     }
 
-    const description = (await response.text().catch(() => "")).trim();
+    const rawBody = (await response.text().catch(() => "")).trim();
+    if (!rawBody) {
+      return {
+        ...fallback,
+        status: "completed",
+        source: "ai",
+      };
+    }
+
+    const parsedPrimary = safeParseJson(rawBody);
+    const parsed = typeof parsedPrimary === "string" ? safeParseJson(parsedPrimary) : parsedPrimary;
+    if (!parsed || !isPlainObject(parsed)) {
+      return {
+        text: rawBody,
+        status: "completed",
+        source: "ai",
+        assessment: cloneAssessmentDto(baselineAssessment),
+      };
+    }
+
+    const assessment = mapBackendAssessment(parsed.ocena_przeslanek, baselineAssessment);
+    const summary = buildIncidentSummary(parsed);
+    const normalizedSummary = summary.trim().length > 0 ? summary.trim() : fallback.text;
     return {
-      text: description.length > 0 ? description : fallback.text,
+      text: normalizedSummary,
       status: "completed",
       source: "ai",
-    } satisfies PdfAnalysisResult;
+      assessment,
+    };
   } catch (error) {
-    console.error("Nie udało się przetworzyć PDF na backendzie", error);
+    const typedError = error instanceof Error ? error : new Error(String(error));
+    const hint =
+      typedError.name === "TypeError"
+        ? "Nie udało się połączyć z serwerem OCR. Upewnij się, że backend działa (domyślnie http://localhost:8000)."
+        : "Nie udało się przetworzyć PDF na backendzie.";
+
+    if (process.env.NODE_ENV === "production") {
+      console.warn(hint);
+    } else {
+      console.warn(`${hint}\nSzczegóły:`, typedError);
+    }
     return fallback;
   }
+}
+
+function cloneAssessmentDto(assessment: AssessmentDto): AssessmentDto {
+  return {
+    suddenness: cloneAssessmentEntry(assessment.suddenness),
+    external_cause: cloneAssessmentEntry(assessment.external_cause),
+    injury: cloneAssessmentEntry(assessment.injury),
+    work_relation: cloneAssessmentEntry(assessment.work_relation),
+  };
+}
+
+function cloneAssessmentEntry(entry: AssessmentDto["suddenness"]) {
+  return {
+    status: entry.status,
+    summary: entry.summary,
+    recommendation: entry.recommendation,
+  };
+}
+
+function mapBackendAssessment(raw: unknown, baseline: AssessmentDto): AssessmentDto {
+  const result = cloneAssessmentDto(baseline);
+  if (!isPlainObject(raw)) {
+    return result;
+  }
+
+  const mapping: Array<{ backendKey: string; targetKey: keyof AssessmentDto }> = [
+    { backendKey: "naglosc", targetKey: "suddenness" },
+    { backendKey: "przyczyna_zewnetrzna", targetKey: "external_cause" },
+    { backendKey: "uraz", targetKey: "injury" },
+    { backendKey: "zwiazek_z_praca", targetKey: "work_relation" },
+  ];
+
+  for (const { backendKey, targetKey } of mapping) {
+    const rawEntry = raw[backendKey];
+    if (!isPlainObject(rawEntry)) {
+      continue;
+    }
+    const baselineEntry = result[targetKey];
+    const status = mapBackendAssessmentStatus(rawEntry.status);
+    const summary = extractString(rawEntry.uzasadnienie) ?? baselineEntry.summary;
+    const recommendation = extractString(rawEntry.rekomendacja) ?? baselineEntry.recommendation;
+    result[targetKey] = {
+      status,
+      summary: summary && summary.length > 0 ? summary : baselineEntry.summary,
+      recommendation: recommendation && recommendation.length > 0 ? recommendation : baselineEntry.recommendation,
+    };
+  }
+
+  return result;
+}
+
+function mapBackendAssessmentStatus(value: unknown): AssessmentStatusDto {
+  if (typeof value === "boolean") {
+    return value ? "met" : "unmet";
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value >= 0.75) {
+      return "met";
+    }
+    if (value <= 0.25) {
+      return "unmet";
+    }
+    return "partial";
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "tak", "spełniona", "spelniona", "met", "ok", "yes", "pełna", "pelna", "kompletna", "complete"].includes(normalized)) {
+      return "met";
+    }
+    if (["false", "nie", "niespełniona", "niespelniona", "brak", "odrzucona", "no", "nie"].includes(normalized)) {
+      return "unmet";
+    }
+    if (["partial", "częściowa", "czesciowa", "częściowo", "czesciowo", "uzupełnić", "uzupelnic", "weryfikacja", "do_weryfikacji", "needs_verification"].includes(normalized)) {
+      return "partial";
+    }
+  }
+  return "partial";
+}
+
+function buildIncidentSummary(payload: Record<string, unknown>): string {
+  const sections: string[] = [];
+  const completeness = isPlainObject(payload.kompletnosc_wniosku) ? payload.kompletnosc_wniosku : null;
+  if (completeness) {
+    const completenessSection = buildCompletenessSection(completeness);
+    if (completenessSection) {
+      sections.push(completenessSection);
+    }
+  }
+
+  const recommendations = asStringArray(payload.rekomendacje_poprawy);
+  if (recommendations.length > 0) {
+    sections.push(formatBulletList("Rekomendacje poprawy", recommendations));
+  }
+
+  const questions = asStringArray(payload.pytania_poglebiajace);
+  if (questions.length > 0) {
+    sections.push(formatBulletList("Pytania pogłębiające", questions));
+  }
+
+  return sections.join("\n\n");
+}
+
+function buildCompletenessSection(data: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const level = extractString(data.poziom_kompletnosci);
+  const numericScore = coerceNumber(data.wynik_calkowity);
+  const summaryBits: string[] = [];
+  if (level) {
+    summaryBits.push(`Poziom kompletności: ${capitalizeFirst(level)}.`);
+  }
+  if (numericScore != null) {
+    summaryBits.push(`Wynik punktowy: ${numericScore}/18.`);
+  }
+  if (summaryBits.length > 0) {
+    parts.push(summaryBits.join(" "));
+  }
+
+  const gaps = asStringArray(data.braki);
+  if (gaps.length > 0) {
+    parts.push(formatBulletList("Braki do uzupełnienia", gaps));
+  }
+
+  const verification = asStringArray(data.elementy_do_weryfikacji);
+  if (verification.length > 0) {
+    parts.push(formatBulletList("Elementy do weryfikacji", verification));
+  }
+
+  return parts.join("\n\n");
+}
+
+function formatBulletList(title: string, items: string[]): string {
+  const normalizedItems = items.filter((item) => item.trim().length > 0);
+  if (normalizedItems.length === 0) {
+    return "";
+  }
+  const bullets = normalizedItems.map((item) => `- ${item}`).join("\n");
+  return `${title}:\n${bullets}`;
+}
+
+function extractString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  return null;
+}
+
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(/,/g, "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry ?? "").trim()))
+      .filter((entry) => entry.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+  }
+  return [];
+}
+
+function capitalizeFirst(value: string) {
+  if (!value) {
+    return value;
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function safeParseJson(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function buildEndpoint(baseUrl: string, path: string) {
@@ -709,6 +996,201 @@ async function downloadPdfTableFallback(items: EmployeeDocument[]) {
 
 function pxToPt(value: number) {
   return (value * 72) / 96;
+}
+
+type AccidentAssessmentKey = keyof EmployeeDocument["assessment"];
+type AccidentAssessmentEntry = EmployeeDocument["assessment"][AccidentAssessmentKey];
+
+const ACCIDENT_ASSESSMENT_SECTIONS: Array<{ key: AccidentAssessmentKey; label: string }> = [
+  { key: "suddenness", label: "Nagłość" },
+  { key: "externalCause", label: "Przyczyna zewnętrzna" },
+  { key: "injury", label: "Uraz" },
+  { key: "workRelation", label: "Związek z pracą" },
+];
+
+const ACCIDENT_ASSESSMENT_STATUS_LABEL: Record<EmployeeDocumentAssessmentStatus, string> = {
+  met: "Spełniona",
+  partial: "Częściowo spełniona",
+  unmet: "Niespełniona",
+};
+
+function buildAccidentCardPayload(document: EmployeeDocument): Record<string, string> {
+  const narrative = buildAssessmentNarrative(document.assessment);
+  const recommendations = collectAssessmentRecommendations(document.assessment);
+  const { decision, justification } = deriveAccidentDecision(document.assessment);
+
+  return {
+    accident_info: normalizeTextValue(document.incidentDescription) ?? "-",
+    accident_effect: narrative.length > 0 ? narrative.join("\n\n") : "-",
+    work_accident_decision: decision,
+    work_accident_justification: justification,
+    report_details: buildReportDetails(document),
+    accident_date: formatIsoDateOnly(document.uploadedAt),
+    acknowledged_person: "-",
+    card_created_date: formatIsoDateOnly(new Date()),
+    card_created_signature: "System ZANT",
+    zus_entity_name: "Zakład Ubezpieczeń Społecznych (tryb demonstracyjny)",
+    zus_officer_name: "Asystent decyzji ZANT",
+    zus_officer_signature: "--",
+    obstacles: "Brak",
+    card_received_date: formatIsoDateOnly(new Date()),
+    attachments: recommendations.length > 0 ? recommendations.map((item) => `- ${item}`).join("\n") : "-",
+  };
+}
+
+function buildAccidentCardFileName(document: EmployeeDocument): string {
+  return document.id != null ? `karta-wypadku-${document.id}.pdf` : "karta-wypadku.pdf";
+}
+
+function buildReportDetails(document: EmployeeDocument): string {
+  const timestamp = formatIsoDateTime(document.uploadedAt);
+  return `System ZANT - Data zgłoszenia: ${timestamp}`;
+}
+
+function buildAssessmentNarrative(assessment: EmployeeDocument["assessment"] | null | undefined): string[] {
+  if (!assessment) {
+    return [];
+  }
+
+  const sections: string[] = [];
+  for (const { key, label } of ACCIDENT_ASSESSMENT_SECTIONS) {
+    const entry = assessment[key];
+    if (!entry) {
+      continue;
+    }
+
+    const statusLabel = ACCIDENT_ASSESSMENT_STATUS_LABEL[entry.status] ?? entry.status;
+    const summary = normalizeTextValue(entry.summary);
+    const recommendation = normalizeTextValue(entry.recommendation);
+    const lines = [`${label}: ${statusLabel}`];
+    if (summary) {
+      lines.push(summary);
+    }
+    if (recommendation) {
+      lines.push(`Rekomendacja: ${recommendation}`);
+    }
+    sections.push(lines.join("\n"));
+  }
+
+  return sections;
+}
+
+function collectAssessmentRecommendations(assessment: EmployeeDocument["assessment"] | null | undefined): string[] {
+  if (!assessment) {
+    return [];
+  }
+
+  const result = new Set<string>();
+  for (const { key } of ACCIDENT_ASSESSMENT_SECTIONS) {
+    const entry = assessment[key];
+    const recommendation = normalizeTextValue(entry?.recommendation);
+    if (recommendation) {
+      result.add(recommendation);
+    }
+  }
+  return Array.from(result);
+}
+
+function deriveAccidentDecision(assessment: EmployeeDocument["assessment"] | null | undefined) {
+  if (!assessment) {
+    return {
+      decision: "Wymaga dodatkowej analizy przez inspektora.",
+      justification: "Brak ocen przesłanek w systemie.",
+    };
+  }
+
+  const entries: AccidentAssessmentEntry[] = ACCIDENT_ASSESSMENT_SECTIONS
+    .map(({ key }) => assessment[key])
+    .filter((entry): entry is AccidentAssessmentEntry => Boolean(entry));
+
+  if (entries.length === 0) {
+    return {
+      decision: "Wymaga dodatkowej analizy przez inspektora.",
+      justification: "Brak ocen przesłanek w systemie.",
+    };
+  }
+
+  const statuses = entries.map((entry) => entry.status);
+  if (statuses.every((status) => status === "met")) {
+    return {
+      decision: "Wypadek jest wypadkiem przy pracy.",
+      justification: "Analiza wskazuje na spełnienie wszystkich przesłanek ustawowych.",
+    };
+  }
+
+  if (statuses.some((status) => status === "unmet")) {
+    const justification = buildJustificationFromAssessment(assessment, (entry) => entry.status === "unmet");
+    return {
+      decision: "Wypadek nie jest wypadkiem przy pracy.",
+      justification: justification || "Zidentyfikowano przesłanki niespełnione przez poszkodowanego.",
+    };
+  }
+
+  const justification = buildJustificationFromAssessment(assessment, (entry) => entry.status !== "met");
+  return {
+    decision: "Wymaga dodatkowej analizy przez inspektora.",
+    justification: justification || "Część przesłanek wymaga uzupełnienia lub weryfikacji.",
+  };
+}
+
+function buildJustificationFromAssessment(
+  assessment: EmployeeDocument["assessment"],
+  predicate: (entry: AccidentAssessmentEntry) => boolean,
+): string {
+  const fragments: string[] = [];
+  for (const { key, label } of ACCIDENT_ASSESSMENT_SECTIONS) {
+    const entry = assessment[key];
+    if (!entry || !predicate(entry)) {
+      continue;
+    }
+
+    const summary = normalizeTextValue(entry.summary);
+    const statusLabel = ACCIDENT_ASSESSMENT_STATUS_LABEL[entry.status] ?? entry.status;
+    const parts = [`${label}: ${statusLabel}`];
+    if (summary) {
+      parts.push(summary);
+    }
+    fragments.push(parts.join(" - "));
+  }
+
+  return fragments.join("\n");
+}
+
+function formatIsoDateOnly(value: string | Date | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === "string" ? value : "-";
+  }
+  return date.toLocaleDateString("pl-PL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+function formatIsoDateTime(value: string | Date | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === "string" ? value : "-";
+  }
+  return date.toLocaleString("pl-PL", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+}
+
+function normalizeTextValue(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 async function createAnonymizedPdf(document: EmployeeDocument): Promise<Blob> {

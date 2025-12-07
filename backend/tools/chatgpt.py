@@ -152,8 +152,11 @@ class ChatGPTClient:
         
         Będziesz pomagał użytkownikowi przy wypełnieniu następujących pól:
         * rodzaj_urazow (opis jakich urazów doznał pracownik)
-        * szczegoly_okolicznosci (Szczegółowy opis okoliczności, miejsca i przyczyn wypadku)
+        * szczegoly_okolicznosci (szczegółowy opis okoliczności, miejsca i przyczyn wypadku)
         * opis_maszyny (opis maszyny, jeśli wypadek powstał przy obsłudze maszyny)
+        * review_summary (podsumowanie zgłoszenia, które wskazuje brakujące informacje przed finalnym wygenerowaniem formularza)
+
+        Jeśli pole to "review_summary", przygotuj 2-3 zdania prostego podsumowania. Najpierw pochwal kompletne elementy, a następnie jasno wypunktuj, których informacji brakuje (np. świadków, miejsca udzielenia pomocy, czasu zdarzenia). Wskaż, co użytkownik powinien sprawdzić przed złożeniem dokumentów. Użyj bezpośrednich sformułowań typu: "Sprawdź, czy dopisałeś...".
         
         Aktualne dane znajdujące się w formularzu:
         {DocumentContextSerializer(data).data}
@@ -165,10 +168,10 @@ class ChatGPTClient:
         Zwróć informację w postaci json:
         
         ```json
-            {{
-                "wartosc_pola": "Nowa wartość aktualnie edytowanego przez użytkownika pola (jeśli jest gotowe)"
-                "wiadomosc": "Wiadomość do użytkownika, która pomoże mu wypełnić pole (jeśli dane nie są pełne)"    
-            }}
+        {{
+            "wartosc_pola": "Nowa wartość aktualnie edytowanego przez użytkownika pola (jeśli jest gotowe)",
+            "wiadomosc": "Wiadomość do użytkownika, która pomoże mu wypełnić pole (jeśli dane nie są pełne lub wymagają doprecyzowania)"
+        }}
         ```
         """
 
@@ -274,4 +277,33 @@ class ChatGPTClient:
         {data}
         """
 
+        return self.simple_chat(prompt)
+
+    def suggested_response(self, *, section_label: str, status_label: str, summary: str,
+                            incident_description: Optional[str] = None,
+                            previous_recommendation: Optional[str] = None,
+                            extra_context: Optional[str] = None) -> str:
+        prompt_lines = [
+            "Jesteś pracownikiem Zakładu Ubezpieczeń Społecznych (ZUS).",
+            "Musisz napisać krótką, uprzejmą odpowiedź do osoby, która zgłosiła wypadek przy pracy.",
+            "Jeśli prosisz o dodatkowe informacje, wskaż konkretnie czego potrzebujesz.",
+            "Używaj języka polskiego, tonu profesjonalnego i wspierającego.",
+            "W wiadomości: (1) podziękuj za przesłane informacje, (2) odnieś się do ocenianej przesłanki,",
+            "(3) poproś o brakujące dane lub poinformuj o kolejnym kroku, (4) zakończ uprzejmą formułą z kontaktem.",
+            "Dane kontekstowe:"
+        ]
+
+        prompt_lines.append(f"- Nazwa przesłanki: {section_label or 'brak danych'}")
+        prompt_lines.append(f"- Status oceny: {status_label or 'brak danych'}")
+        prompt_lines.append(f"- Podsumowanie oceny: {summary or 'brak danych'}")
+        if incident_description:
+            prompt_lines.append(f"- Opis zdarzenia: {incident_description}")
+        if previous_recommendation:
+            prompt_lines.append(f"- Poprzednia rekomendacja: {previous_recommendation}")
+        if extra_context:
+            prompt_lines.append(f"- Dodatkowe informacje: {extra_context}")
+
+        prompt_lines.append("Zwróć jedną wiadomość gotową do wysłania, w maksymalnie 5-6 zdaniach.")
+
+        prompt = "\n".join(prompt_lines)
         return self.simple_chat(prompt)

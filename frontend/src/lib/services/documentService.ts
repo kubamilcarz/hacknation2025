@@ -86,6 +86,7 @@ async function ensurePdfFont(doc: jsPDF) {
       if ((variant.style === "normal" && hasNormal) || (variant.style === "bold" && hasBold)) {
         continue;
       }
+
       const fontBase64 = fontData[variant.file];
       if (!fontBase64) {
         continue;
@@ -282,6 +283,24 @@ class HttpDocumentApi implements DocumentApi {
     if (options?.search) {
       params.set("search", options.search);
     }
+    if (typeof options?.page === "number" && Number.isFinite(options.page)) {
+      params.set("page", String(Math.max(1, Math.floor(options.page))));
+    }
+    if (typeof options?.pageSize === "number" && Number.isFinite(options.pageSize)) {
+      params.set("pageSize", String(Math.max(1, Math.floor(options.pageSize))));
+    }
+    if (options?.sort) {
+      params.set("sort", options.sort);
+    }
+    if (options?.direction) {
+      params.set("direction", options.direction);
+    }
+    if (typeof options?.helpProvided === "boolean") {
+      params.set("helpProvided", options.helpProvided ? "true" : "false");
+    }
+    if (typeof options?.machineInvolved === "boolean") {
+      params.set("machineInvolved", options.machineInvolved ? "true" : "false");
+    }
 
     try {
       const response = await fetch(`${this.documentsUrl}?${params.toString()}`, {
@@ -305,8 +324,8 @@ class HttpDocumentApi implements DocumentApi {
         items: payload.items ?? [],
         totalCount: payload.totalCount ?? payload.items.length ?? 0,
         totalPages: payload.totalPages ?? 1,
-        page: payload.page ?? 1,
-        pageSize: payload.pageSize ?? (options?.pageSize ?? 10),
+        page: payload.page ?? options?.page ?? 1,
+        pageSize: payload.pageSize ?? options?.pageSize ?? 10,
       } satisfies DocumentListResponseDto;
     } catch (error) {
       console.error("Nie udało się pobrać listy zgłoszeń z backendu", error);
@@ -589,203 +608,93 @@ function downloadPdf(items: Document[]) {
   })();
 }
 
-async function createDocumentSummaryPdf(document: Document): Promise<Blob> {
-  if (typeof window === "undefined") {
-    return new Blob();
-  }
-
-  const [{ jsPDF }, autoTableModule] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
-
-  const autoTable = (autoTableModule as AutoTableModule).default;
-  if (!autoTable) {
-    return new Blob();
-  }
-
-  const doc = new jsPDF({ orientation: "portrait", unit: "pt" });
-  await ensurePdfFont(doc);
-  doc.setFontSize(11);
-  const headers = ["Pole", "Wartość"];
-  const rows = buildDocumentSummaryRows(document);
-
-  autoTable(doc, {
-    head: [headers],
-    body: rows,
-    styles: { font: PDF_FONT_NAME, fontSize: 11, cellPadding: 6 },
-    headStyles: { fillColor: [16, 61, 122], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [245, 247, 252] },
-    margin: { top: 40, bottom: 40, left: 40, right: 40 },
-    columnStyles: {
-      0: { cellWidth: 160 },
-      1: { cellWidth: "auto" },
-    },
-  });
-
-  return doc.output("blob");
-}
-
-function createDocumentSummaryDocx(document: Document) {
-  const rows = buildDocumentSummaryRows(document);
-  const issuedAt = new Date().toLocaleString("pl-PL", {
-    dateStyle: "long",
-    timeStyle: "short",
-  });
-
-  const sections = rows
-    .map(([label, value]) => `<p><strong>${escapeHtmlBasic(label)}:</strong> ${escapeHtmlPreservingBreaks(value)}</p>`)
-    .join("\n");
-
-  const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8" /><title>Zawiadomienie o wypadku</title><style>body{font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#1c2333;}h1{font-size:20px;margin-bottom:16px;}p{margin:8px 0;}strong{color:#103d7a;}</style></head><body><h1>Zawiadomienie o wypadku</h1><p>Wygenerowano: ${escapeHtmlBasic(issuedAt)}</p>${sections}</body></html>`;
-
-  return new Blob([html], {
-    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document;charset=utf-8",
-  });
-}
-
 type DownloadDocumentSummaryOptions = {
   fileName?: string;
 };
 
 export async function downloadDocumentSummary(
   document: Document,
-  format: "docx" | "pdf",
+  format: "pdf" = "pdf",
   options: DownloadDocumentSummaryOptions = {}
 ): Promise<void> {
-  const targetFileName = buildSummaryFileName(format, options.fileName);
-
-  if (format === "pdf") {
-    const pdfBlob = await createDocumentSummaryPdf(document);
-    downloadBlobWithName(pdfBlob, targetFileName);
-    return;
+  if (format !== "pdf") {
+    throw new Error("Obsługujemy obecnie tylko pobieranie plików PDF.");
   }
 
-  const docxBlob = createDocumentSummaryDocx(document);
-  downloadBlobWithName(docxBlob, targetFileName);
-}
+  const targetFileName = buildSummaryFileName(options.fileName);
+  const payload = mapPartialDocumentToCreateDto(document);
+  const requestBody: Record<string, unknown> = {
+    action: "generate-pdf",
+    ...payload,
+  };
 
-function buildDocumentSummaryRows(document: Document): string[][] {
-  const rows: Array<[string, string]> = [
-    ["Numer zgłoszenia", formatSummaryValue(document.id != null ? document.id.toString() : null)],
-    ["Imię i nazwisko", formatSummaryValue(`${document.imie ?? ""} ${document.nazwisko ?? ""}`)],
-    ["PESEL", formatSummaryValue(document.pesel)],
-    ["Numer dokumentu tożsamości", formatSummaryValue(document.nr_dowodu)],
-    ["Adres zamieszkania", formatSummaryValue(formatSummaryAddress(document))],
-    ["Telefon kontaktowy", formatSummaryValue(document.numer_telefonu)],
-    [
-      "Data i godzina wypadku",
-      formatSummaryValue(formatSummaryDateTime(document.data_wypadku, document.godzina_wypadku)),
-    ],
-    ["Miejsce wypadku", formatSummaryValue(document.miejsce_wypadku)],
-    ["Czy udzielono pierwszej pomocy", formatSummaryBoolean(document.czy_udzielona_pomoc)],
-    ["Opis okoliczności", formatSummaryValue(document.szczegoly_okolicznosci)],
-    ["Maszyny i urządzenia", formatSummaryValue(document.opis_maszyn)],
-    ["Świadkowie", formatWitnessList(document)],
-  ];
-
-  return rows.map(([label, value]) => [label, value]);
-}
-
-function formatSummaryValue(value: string | number | null | undefined) {
-  const normalized = normalizeSummaryValue(value);
-  return normalized.length > 0 ? normalized : "Brak danych";
-}
-
-function normalizeSummaryValue(value: string | number | null | undefined) {
-  if (value == null) {
-    return "";
+  if (typeof document.id === "number") {
+    requestBody.id = document.id;
   }
 
-  const asString = typeof value === "number" ? value.toString() : value;
-  return asString.trim();
+  let response: Response;
+  try {
+    response = await fetch(buildEndpoint(DEFAULT_BACKEND_URL, DOCUMENTS_ENDPOINT), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/pdf",
+      },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (error) {
+    console.error("Nie udało się połączyć z backendem podczas pobierania PDF", error);
+    throw new Error("Nie udało się połączyć z serwerem. Spróbuj ponownie.");
+  }
+
+  if (!response.ok) {
+    const details = await safeReadError(response);
+    const message = details
+      ? `Nie udało się przygotować PDF. ${details}`
+      : `Nie udało się przygotować PDF (kod ${response.status}).`;
+    throw new Error(message);
+  }
+
+  const pdfBlob = await response.blob();
+  downloadBlobWithName(pdfBlob, targetFileName);
 }
 
-function formatSummaryDateTime(date: string | null | undefined, time: string | null | undefined) {
-  const normalizedDate = normalizeSummaryValue(date);
-  const normalizedTime = normalizeSummaryValue(time ? time.slice(0, 5) : time);
-  return [normalizedDate, normalizedTime].filter(Boolean).join(" ");
+export async function downloadAnonymizedDocument(
+  documentId: number,
+  options: DownloadDocumentSummaryOptions = {}
+): Promise<void> {
+  if (!Number.isFinite(documentId) || documentId <= 0) {
+    throw new Error("Nieprawidłowy identyfikator dokumentu.");
+  }
+
+  const endpoint = buildEndpoint(DEFAULT_BACKEND_URL, `${DOCUMENTS_ENDPOINT}${documentId}/anonymized/`);
+  let response: Response;
+
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/pdf",
+      },
+    });
+  } catch (error) {
+    console.error("Nie udało się połączyć z backendem podczas pobierania zanonimizowanego PDF", error);
+    throw new Error("Nie udało się połączyć z serwerem. Spróbuj ponownie.");
+  }
+
+  if (!response.ok) {
+    const details = await safeReadError(response);
+    const message = details
+      ? `Nie udało się pobrać zanonimizowanego pliku. ${details}`
+      : `Nie udało się pobrać zanonimizowanego pliku (kod ${response.status}).`;
+    throw new Error(message);
+  }
+
+  const pdfBlob = await response.blob();
+  const fileName = buildAnonymizedFileName(options.fileName);
+  downloadBlobWithName(pdfBlob, fileName);
 }
 
-function formatSummaryAddress(document: Document) {
-  const street = normalizeSummaryValue(document.ulica);
-  const house = normalizeSummaryValue(document.nr_domu);
-  const flat = normalizeSummaryValue(document.nr_lokalu);
-  const postal = normalizeSummaryValue(document.kod_pocztowy);
-  const city = normalizeSummaryValue(document.miejscowosc);
-  const country = normalizeSummaryValue(document.nazwa_panstwa);
-
-  const parts: string[] = [];
-  const streetLine: string[] = [];
-
-  if (street) {
-    streetLine.push(street);
-  }
-
-  if (house || flat) {
-    const numberParts = [house, flat].filter(Boolean);
-    if (numberParts.length > 0) {
-      streetLine.push(numberParts.join("/"));
-    }
-  }
-
-  if (streetLine.length > 0) {
-    parts.push(streetLine.join(" "));
-  }
-
-  const locality: string[] = [];
-  if (postal && city) {
-    locality.push(`${postal} ${city}`);
-  } else {
-    if (postal) {
-      locality.push(postal);
-    }
-    if (city) {
-      locality.push(city);
-    }
-  }
-
-  if (locality.length > 0) {
-    parts.push(locality.join(" "));
-  }
-
-  if (country) {
-    parts.push(country);
-  }
-
-  return parts.join(", ");
-}
-
-function formatSummaryBoolean(value: boolean | null | undefined) {
-  if (value === true) {
-    return "Tak";
-  }
-  if (value === false) {
-    return "Nie";
-  }
-  return "Brak danych";
-}
-
-function formatWitnessList(document: Document) {
-  const names = (document.witnesses ?? [])
-    .map((witness) => normalizeSummaryValue(`${witness.imie ?? ""} ${witness.nazwisko ?? ""}`))
-    .filter((name) => name.length > 0);
-
-  return names.length > 0 ? names.join(", ") : "Brak świadków";
-}
-
-function escapeHtmlBasic(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeHtmlPreservingBreaks(value: string) {
-  return escapeHtmlBasic(value).replace(/\r\n|\r|\n/g, "<br />");
-}
 
 function downloadBlob(blob: Blob, extension: string) {
   if (typeof document === "undefined") {
@@ -819,14 +728,24 @@ function downloadBlobWithName(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function buildSummaryFileName(format: "docx" | "pdf", explicitName?: string) {
-  const extension = format === "pdf" ? "pdf" : "docx";
+function buildSummaryFileName(explicitName?: string) {
+  const extension = "pdf";
   if (explicitName) {
     return ensureFileExtension(explicitName, extension);
   }
 
   const today = new Date().toISOString().slice(0, 10);
   return `zgloszenie-${today}.${extension}`;
+}
+
+function buildAnonymizedFileName(explicitName?: string) {
+  const extension = "pdf";
+  if (explicitName) {
+    return ensureFileExtension(explicitName, extension);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  return `zgloszenie-${today}-anon.${extension}`;
 }
 
 function ensureFileExtension(fileName: string, extension: string) {
@@ -843,4 +762,4 @@ const documentService: DocumentService = new DefaultDocumentService(
   new HttpDocumentApi({ baseUrl: DEFAULT_BACKEND_URL })
 );
 
-export { documentService, downloadDocumentSummary };
+export { documentService, downloadDocumentSummary, downloadAnonymizedDocument };

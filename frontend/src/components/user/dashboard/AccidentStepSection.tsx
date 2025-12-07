@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent, type ReactNode } from 'react';
+import { useMemo, useRef, type ChangeEvent, type ReactNode } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
@@ -48,6 +48,7 @@ export function AccidentStepSection() {
   const medicalInputRef = useRef<HTMLInputElement | null>(null);
   const additionalInputRef = useRef<HTMLInputElement | null>(null);
   const legalInputRef = useRef<HTMLInputElement | null>(null);
+  const aiContext = useMemo(() => ({ documentData: incidentDraft }), [incidentDraft]);
 
   type AttachmentItem = {
     id: string;
@@ -165,32 +166,32 @@ export function AccidentStepSection() {
   const accidentDetailsFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.accidentDetails,
     incidentDraft.szczegoly_okolicznosci ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.accidentDetails },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.accidentDetails, context: aiContext },
   );
   const locationFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.location,
     incidentDraft.miejsce_wypadku ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.location },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.location, context: aiContext },
   );
   const injuriesFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.injuries,
     incidentDraft.rodzaj_urazow ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.injuries },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.injuries, context: aiContext },
   );
   const medicalHelpPlaceFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.medicalHelpPlace,
     medicalHelpProvided ? incidentDraft.miejsce_udzielenia_pomocy ?? '' : '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.medicalHelpPlace },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.medicalHelpPlace, context: aiContext },
   );
   const authorityFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.authority,
     incidentDraft.organ_postepowania ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.authority },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.authority, context: aiContext },
   );
   const machineDescriptionFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.machineDescription,
     machineInvolved ? incidentDraft.opis_maszyn ?? '' : '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.machineDescription },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.machineDescription, context: aiContext },
   );
 
   const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult, fallbackHint: ReactNode) => {
@@ -272,7 +273,7 @@ export function AccidentStepSection() {
             optional
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             label="Miejsce wypadku"
             name="miejsce_wypadku"
@@ -295,7 +296,7 @@ export function AccidentStepSection() {
             </IncidentAiSuggestion>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             component="textarea"
             label="Rodzaj doznanych urazów"
@@ -329,7 +330,7 @@ export function AccidentStepSection() {
         >
           <span>Co dokładnie się stało?</span>
         </label>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             component="textarea"
             label="Co dokładnie się stało?"
@@ -370,7 +371,7 @@ export function AccidentStepSection() {
           { label: 'Nie', value: false },
         ])}
         {medicalHelpProvided && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <IncidentTextField
               label="Gdzie udzielono pomocy?"
               name="miejsce_udzielenia_pomocy"
@@ -397,7 +398,7 @@ export function AccidentStepSection() {
       </div>
 
       <div className="md:col-span-2">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             component="textarea"
             label="Organ prowadzący postępowanie"
@@ -435,7 +436,7 @@ export function AccidentStepSection() {
         ])}
         {machineInvolved && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <IncidentTextField
                 component="textarea"
                 label="Jaka maszyna lub urządzenie brały udział?"
@@ -485,7 +486,6 @@ export function AccidentStepSection() {
             <div className="space-y-1">
               <div className="flex items-baseline justify-between">
                 <p className="text-sm font-semibold text-primary">Dokumentacja medyczna</p>
-                <span className="text-xs font-semibold text-(--color-error)">Wymagane</span>
               </div>
               <p className="text-xs text-muted">
                 Dołącz wypisy ze szpitala, wyniki badań lub zaświadczenia lekarskie potwierdzające uraz.

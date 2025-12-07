@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AiFeedbackService } from '@/lib/services/aiFeedbackService';
+import type { AiFeedbackContextPayload, AiFeedbackService } from '@/lib/services/aiFeedbackService';
 import { createAiFeedbackService } from '@/lib/services/aiFeedbackService';
 
 type AiFeedbackStatus = 'idle' | 'debouncing' | 'loading' | 'success' | 'error';
@@ -51,6 +51,8 @@ type UseAiFeedbackReturn = AiFeedbackState & {
 
 interface UseAiFeedbackOptions {
 	metadata?: Record<string, unknown>;
+	context?: AiFeedbackContextPayload;
+	debounceMs?: number;
 }
 
 export function useAiFeedback(
@@ -65,10 +67,20 @@ export function useAiFeedback(
 
 	const { service, debounceMs } = context;
 	const metadata = options?.metadata;
+	const contextPayload = options?.context;
+	const customDebounceMs = options?.debounceMs;
 	const [state, setState] = useState<AiFeedbackState>(IDLE_STATE);
 	const debounceHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const requestIdRef = useRef(0);
+	const latestPayloadRef = useRef({ fieldId, metadata, contextPayload, normalizedText: '' });
+	const previousTextRef = useRef<string | null>(null);
 	const normalizedText = rawText?.trim() ?? '';
+	const effectiveDebounceMs = useMemo(() => {
+		if (typeof customDebounceMs === 'number') {
+			return customDebounceMs;
+		}
+		return debounceMs;
+	}, [customDebounceMs, debounceMs]);
 
 	const clearPendingTimeout = useCallback(() => {
 		if (debounceHandle.current) {
@@ -77,7 +89,23 @@ export function useAiFeedback(
 		}
 	}, []);
 
+	useEffect(() => {
+		latestPayloadRef.current = {
+			fieldId,
+			metadata,
+			contextPayload,
+			normalizedText,
+		};
+	}, [fieldId, metadata, contextPayload, normalizedText]);
+
 	const triggerRequest = useCallback(() => {
+		const { fieldId: activeField, metadata: activeMetadata, contextPayload: activeContext, normalizedText: text } =
+			latestPayloadRef.current;
+		if (!text) {
+			setState(IDLE_STATE);
+			return;
+		}
+
 		const currentRequestId = requestIdRef.current + 1;
 		requestIdRef.current = currentRequestId;
 
@@ -88,7 +116,7 @@ export function useAiFeedback(
 		}));
 
 		service
-			.getFeedback({ fieldId, text: normalizedText, metadata })
+			.getFeedback({ fieldId: activeField, text, metadata: activeMetadata, context: activeContext })
 			.then((response) => {
 				if (requestIdRef.current !== currentRequestId) {
 					return;
@@ -104,15 +132,32 @@ export function useAiFeedback(
 				const message = error instanceof Error ? error.message : 'Nie udało się pobrać podpowiedzi.';
 				setState({ status: 'error', message: null, error: message });
 			});
-	}, [fieldId, metadata, normalizedText, service]);
+	}, [service]);
 
 	useEffect(() => {
+		if (previousTextRef.current === normalizedText) {
+			return () => {
+				clearPendingTimeout();
+			};
+		}
+		previousTextRef.current = normalizedText;
+
 		clearPendingTimeout();
 
 		if (!normalizedText) {
 			startTransition(() => {
 				setState(IDLE_STATE);
 			});
+			return () => {
+				clearPendingTimeout();
+			};
+		}
+
+		const delay = Math.max(0, effectiveDebounceMs ?? 0);
+		if (delay === 0) {
+			debounceHandle.current = setTimeout(() => {
+				triggerRequest();
+			}, 0);
 			return () => {
 				clearPendingTimeout();
 			};
@@ -128,16 +173,17 @@ export function useAiFeedback(
 
 		debounceHandle.current = setTimeout(() => {
 			triggerRequest();
-		}, debounceMs);
+		}, delay);
 
 		return () => {
 			clearPendingTimeout();
 		};
-	}, [normalizedText, debounceMs, triggerRequest, clearPendingTimeout]);
+	}, [normalizedText, triggerRequest, clearPendingTimeout, effectiveDebounceMs]);
 
 	const refresh = () => {
 		clearPendingTimeout();
-		if (!normalizedText) {
+		const { normalizedText: text } = latestPayloadRef.current;
+		if (!text) {
 			setState(IDLE_STATE);
 			return;
 		}

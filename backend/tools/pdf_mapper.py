@@ -3,10 +3,42 @@ from __future__ import annotations
 from typing import Dict, Any, Union
 from pathlib import Path
 from datetime import datetime, date, time
+import unicodedata
 
 from PyPDF2 import PdfReader
 
 from api.models import Document
+
+CHECKBOX_MARK = "X"
+
+# (field_name_for_true, field_name_for_false, document_attr)
+BOOLEAN_CHECKBOX_FIELDS = [
+    ("TAK6[0]", "NIE6[0]", "czy_udzielona_pomoc"),
+    ("TAK8[0]", "NIE8[0]", "czy_wypadek_podczas_uzywania_maszyny"),
+    ("TAK9[0]", "NIE9[0]", "czy_maszyna_posiada_atest"),
+    ("TAK10[0]", "NIE10[0]", "czy_maszyna_w_ewidencji"),
+]
+
+# Used both for forward (Document -> PDF) and reverse (PDF -> Document) mappings
+BOOLEAN_CHECKBOX_STATE_MAP: Dict[str, tuple[str, bool]] = {
+    true_field: (attr, True) for true_field, _, attr in BOOLEAN_CHECKBOX_FIELDS
+}
+BOOLEAN_CHECKBOX_STATE_MAP.update({
+    false_field: (attr, False) for _, false_field, attr in BOOLEAN_CHECKBOX_FIELDS
+})
+
+# (pdf_field_name, normalized_label, matching_keywords)
+CORRESPONDENCE_FIELD_OPTIONS = [
+    ("adres[0]", "adres", {"adres", "adres domowy", "domowy"}),
+    ("posterestante[0]", "poste restante", {"poste restante", "poste", "restante"}),
+    ("skrytkapocztowa[0]", "skrytka pocztowa", {"skrytka", "skrytka pocztowa"}),
+    (
+        "przegrodkapocztowa[0]",
+        "przegrodka pocztowa",
+        {"przegrodka", "przegr", "przegrodka pocztowa"},
+    ),
+]
+CORRESPONDENCE_FIELD_LABELS = {field: label for field, label, _ in CORRESPONDENCE_FIELD_OPTIONS}
 
 
 def _fmt(value: Any) -> str:
@@ -42,6 +74,33 @@ def _fmt_date(value: Any) -> str:
         return s
     # Fallback to string conversion
     return str(value)
+
+
+def _normalize_choice(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def _set_checkbox_pair(data: Dict[str, str], true_field: str, false_field: str, raw_value: Any) -> None:
+    if raw_value is None:
+        return
+    if bool(raw_value):
+        data[true_field] = CHECKBOX_MARK
+    else:
+        data[false_field] = CHECKBOX_MARK
+
+
+def _set_correspondence_option(data: Dict[str, str], value: Any) -> None:
+    normalized = _normalize_choice(value)
+    if not normalized:
+        return
+    for field_name, _label, keywords in CORRESPONDENCE_FIELD_OPTIONS:
+        if any(keyword in normalized for keyword in keywords):
+            data[field_name] = CHECKBOX_MARK
+            return
 
 
 def map_document_to_pdf_fields(document: Document) -> Dict[str, str]:
@@ -83,6 +142,7 @@ def map_document_to_pdf_fields(document: Document) -> Dict[str, str]:
     data["Kodpocztowy2A[0]"] = _fmt(document.kod_pocztowy_korespondencji)
     data["Poczta2A[0]"] = _fmt(document.miejscowosc_korespondencji)
     data["Nazwapaństwa2[0]"] = _fmt(document.nazwa_panstwa_korespondencji)
+    _set_correspondence_option(data, document.typ_korespondencji)
 
     # Adres miejsca prowadzenia działalności → grupa "3"
     data["Ulica3[0]"] = _fmt(document.ulica_dzialalnosci)
@@ -126,6 +186,24 @@ def map_document_to_pdf_fields(document: Document) -> Dict[str, str]:
     data["Tekst6[0]"] = _fmt(document.organ_postepowania)
     data["Tekst5[0]"] = _fmt(document.miejsce_udzielenia_pomocy)
     data["Tekst4[0]"] = _fmt(document.opis_maszyn)
+
+    # Bool fields rendered as checkbox pairs
+    for true_field, false_field, attr in BOOLEAN_CHECKBOX_FIELDS:
+        value = getattr(document, attr, None)
+        _set_checkbox_pair(data, true_field, false_field, value)
+
+    # Automatically stamp the form completion date if possible
+    data["Data[0]"] = _fmt_date(date.today())
+
+    # Witness slots – fill the first witness if recorded
+    witness = None
+    try:
+        witness = document.witnesses.first()
+    except Exception:
+        witness = None
+    if witness:
+        data["Imię2[0]"] = _fmt(getattr(witness, "imie", ""))
+        data["Nazwisko2[0]"] = _fmt(getattr(witness, "nazwisko", ""))
 
     # Booleans: without precise checkbox mapping, use human-readable strings if needed
     # Uncomment and adjust if the template expects specific checkbox fields.
@@ -244,6 +322,17 @@ def _parse_time(val: str) -> time | None:
     return None
 
 
+def _is_checkbox_selected(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "off", "0", "false"}:
+            return False
+        return True
+    return bool(value)
+
+
 def map_pdf_fields_to_document_data(fields: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a dict of PDF field values into a partial Document data dict.
 
@@ -255,8 +344,20 @@ def map_pdf_fields_to_document_data(fields: Dict[str, Any]) -> Dict[str, Any]:
         are omitted. Date and time fields are parsed to date/time objects when possible.
     """
     out: Dict[str, Any] = {}
+    correspondence_choice: str | None = None
 
     for pdf_key, value in fields.items():
+        if pdf_key in BOOLEAN_CHECKBOX_STATE_MAP:
+            if _is_checkbox_selected(value):
+                model_field, state = BOOLEAN_CHECKBOX_STATE_MAP[pdf_key]
+                out[model_field] = state
+            continue
+
+        if pdf_key in CORRESPONDENCE_FIELD_LABELS:
+            if _is_checkbox_selected(value):
+                correspondence_choice = CORRESPONDENCE_FIELD_LABELS[pdf_key]
+            continue
+
         if pdf_key not in PDF_TO_DOCUMENT_FIELD:
             continue
         model_field = PDF_TO_DOCUMENT_FIELD[pdf_key]
@@ -264,10 +365,11 @@ def map_pdf_fields_to_document_data(fields: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if isinstance(value, str):
             cleaned = value.strip()
-            if cleaned == "":
-                continue
         else:
             cleaned = str(value)
+
+        if cleaned == "":
+            continue
 
         # Decide parsing based on target field type name heuristics
         if model_field.startswith("data_") or model_field in {"data_urodzenia"}:
@@ -285,6 +387,9 @@ def map_pdf_fields_to_document_data(fields: Dict[str, Any]) -> Dict[str, Any]:
                 out[model_field] = cleaned
         else:
             out[model_field] = cleaned
+
+    if correspondence_choice:
+        out["typ_korespondencji"] = correspondence_choice
 
     return out
 
