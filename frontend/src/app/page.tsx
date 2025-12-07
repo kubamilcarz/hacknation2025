@@ -20,9 +20,8 @@ export default function Home() {
               </span>
               <p className="text-2xl font-semibold text-primary">Zgłoś wypadek</p>
               <p className="text-lg leading-relaxed text-secondary">
-                Jeśli właśnie doświadczyłeś wypadku, przeprowadzimy Cię przez każdy krok. Asystent przypilnuje formalności,
-                podpowie brakujące dane i przekaże je dalej do zespołu ZUS. Ty możesz w spokoju skupić się na
-                zdrowiu.
+                Jeżeli doświadczyłeś wypadku wypełnij formularz, a my przeprowadzimy Cię przez każdy krok. Asystent AI przypilnuje formalności,
+                podpowie jak poprawnie uzupełnić dane i przekaże je dalej do zespołu ZUS. Wszystko po to, abyś mógł skupić się na swoim zdrowiu.
               </p>
             </div>
 
@@ -30,15 +29,15 @@ export default function Home() {
               {[
                 {
                   title: "Opowiedz co się stało",
-                  body: "Wpisz zdarzenie własnymi słowami, a system podpowie, o co jeszcze warto uzupełnić opis.",
+                  body: "Opisz zdarzenie własnymi słowami, a system podpyta o szczegóły.",
                 },
                 {
                   title: "Uzupełnij wymagane dane",
-                  body: "Asystent przypomina o PESEL, czasie, miejscu wypadku i dokumentach, które zwiększą szanse na uznanie.",
+                  body: "Asystent dba o to, aby wniosek był kompletny.",
                 },
                 {
-                  title: "Przejmujemy kontakt z ZUS",
-                  body: "Gotowe zgłoszenie trafia do pracownika, który widzi nasze wskazówki i szybciej udziela odpowiedzi.",
+                  title: "Wygeneruj gotowy plik do pobrania",
+                  body: "Z gotowym plikiem udaj się do odziału ZUS lub wysłać go przez PUE/eZUS.",
                 },
               ].map((step, index) => (
                 <li key={step.title} className="flex gap-3">
