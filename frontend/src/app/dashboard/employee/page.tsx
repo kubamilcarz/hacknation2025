@@ -454,7 +454,7 @@ export default function EmployeeDashboard() {
     } catch (error) {
       console.error('Nie udało się wyeksportować dokumentów.', error);
     }
-  }, [totalCount]);
+  }, [formatDate, totalCount]);
 
   const handleConfirmExport = useCallback(async () => {
     if (isExporting || totalCount === 0) {

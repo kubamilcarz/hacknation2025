@@ -3,84 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useDocuments } from '@/context/DocumentContext';
-import {
-  employeeDocumentService,
-  formatFileSize,
-  formatStatus,
-} from '@/lib/services/employeeDocumentService';
-import type { EmployeeDocument } from '@/types/employeeDocument';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
-
-const DESCRIPTION_SOURCE_LABEL: Record<EmployeeDocument['descriptionSource'], string> = {
-  ai: 'Opis wygenerowany przez AI',
-  manual: 'Opis dodany ręcznie',
-};
-
-const ASSESSMENT_SECTIONS = [
-  { key: 'suddenness', label: 'Nagłość', helper: 'Czy zdarzenie nastąpiło w krótkim czasie.' },
-  { key: 'externalCause', label: 'Przyczyna zewnętrzna', helper: 'Czy wystąpił czynnik spoza organizmu.' },
-  { key: 'injury', label: 'Uraz', helper: 'Czy doszło do uszkodzenia ciała lub zdrowia.' },
-  { key: 'workRelation', label: 'Związek z pracą', helper: 'Czy zdarzenie pozostaje w związku z obowiązkami.' },
-] as const;
-
-type AssessmentSectionKey = (typeof ASSESSMENT_SECTIONS)[number]['key'];
-
-const STATUS_LABEL: Record<EmployeeDocument['assessment']['suddenness']['status'], string> = {
-  met: 'Spełniona',
-  partial: 'Niepełna',
-  unmet: 'Niespełniona',
-};
-
-function getAssessmentStatusClasses(status: EmployeeDocument['assessment']['suddenness']['status']) {
-  switch (status) {
-    case 'met':
-      return 'bg-(--color-success-soft) text-(--color-success) border-(--color-success)';
-    case 'partial':
-      return 'bg-(--color-warning-soft) text-(--color-warning) border-(--color-warning)';
-    case 'unmet':
-    default:
-      return 'bg-(--color-error-soft) text-(--color-error) border-(--color-error)';
-  }
-}
-
-function getAssessmentCardOutline(status: EmployeeDocument['assessment']['suddenness']['status']) {
-  switch (status) {
-    case 'met':
-      return 'border-(--color-success-softest) bg-(--color-success-softest)';
-    case 'partial':
-      return 'border-(--color-warning-softest) bg-(--color-warning-softest)';
-    case 'unmet':
-    default:
-      return 'border-(--color-error-softest) bg-(--color-error-softest)';
-  }
-}
-
-function getStatusBadgeClasses(status: EmployeeDocument['analysisStatus']) {
-  switch (status) {
-    case 'completed':
-      return 'border-(--color-success) bg-(--color-success-soft) text-(--color-success)';
-    case 'processing':
-      return 'border-(--color-accent) bg-(--color-accent-soft) text-(--color-accent-text)';
-    case 'failed':
-      return 'border-(--color-error) bg-(--color-error-soft) text-(--color-error)';
-    default:
-      return 'border-subtle bg-surface text-secondary';
-  }
-}
-
-function formatUploadDate(iso: string) {
-  if (!iso) {
-    return 'Brak danych';
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleString('pl-PL', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-  });
-}
+import {
+  DOCUMENT_DETAIL_ASSESSMENT_SECTIONS,
+  documentDetailService,
+  type DocumentPreviewHandle,
+} from '@/lib/services/documentDetailService';
+import { formatFileSize, formatStatus } from '@/lib/services/employeeDocumentService';
+import type { EmployeeDocument } from '@/types/employeeDocument';
 
 export default function DocumentDetail() {
   const router = useRouter();
@@ -107,11 +37,10 @@ export default function DocumentDetail() {
     }
 
     let isCancelled = false;
-    let objectUrl: string | null = null;
 
     const fetchDocument = async () => {
       try {
-        const remote = await employeeDocumentService.getById(documentId);
+        const remote = await documentDetailService.fetchDocument(documentId);
         if (isCancelled) {
           return;
         }
@@ -143,18 +72,18 @@ export default function DocumentDetail() {
     }
 
     let isCancelled = false;
-    let objectUrl: string | null = null;
+    let previewHandle: DocumentPreviewHandle | null = null;
     setIsPreviewLoading(true);
     setPreviewError(null);
 
     const loadPreview = async () => {
       try {
-        const blob = await employeeDocumentService.getOriginalFile(documentData.id!);
+        previewHandle = await documentDetailService.createPreview(documentData.id);
         if (isCancelled) {
+          previewHandle.release();
           return;
         }
-        objectUrl = URL.createObjectURL(blob);
-        setPreviewUrl(objectUrl);
+        setPreviewUrl(previewHandle.url);
       } catch (err) {
         if (!isCancelled) {
           console.error(err);
@@ -174,8 +103,8 @@ export default function DocumentDetail() {
       isCancelled = true;
       setIsPreviewLoading(false);
       setPreviewError(null);
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
+      if (previewHandle) {
+        previewHandle.release();
       }
     };
   }, [documentData?.id]);
@@ -218,33 +147,7 @@ export default function DocumentDetail() {
     }
   };
 
-  const metadataCards = documentData
-    ? [
-        { label: 'ID dokumentu', value: documentData.id != null ? `#${documentData.id}` : 'Brak danych' },
-        { label: 'Rozmiar pliku', value: formatFileSize(documentData.fileSize) },
-        { label: 'Status analizy', value: formatStatus(documentData.analysisStatus) },
-        { label: 'Źródło opisu', value: DESCRIPTION_SOURCE_LABEL[documentData.descriptionSource] ?? 'Brak danych' },
-      ]
-    : [];
-
-  const resolveAssessmentEntry = (key: AssessmentSectionKey) => {
-    if (!documentData) {
-      return null;
-    }
-    const assessment = documentData.assessment;
-    switch (key) {
-      case 'suddenness':
-        return assessment.suddenness;
-      case 'externalCause':
-        return assessment.externalCause;
-      case 'injury':
-        return assessment.injury;
-      case 'workRelation':
-        return assessment.workRelation;
-      default:
-        return null;
-    }
-  };
+  const metadataCards = useMemo(() => documentDetailService.buildMetadataCards(documentData), [documentData]);
 
   const renderAssessmentAction = (status: EmployeeDocument['assessment']['suddenness']['status'], recommendation?: string) => {
     if (status === 'met') {
@@ -284,7 +187,7 @@ export default function DocumentDetail() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted">Dokument #{documentData?.id ?? '—'}</p>
                   <h1 className="mt-1 text-2xl font-semibold text-primary">{documentData?.fileName ?? 'Dokument'}</h1>
                   {documentData && (
-                    <p className="text-sm text-muted">Przesłano {formatUploadDate(documentData.uploadedAt)}</p>
+                    <p className="text-sm text-muted">Przesłano {documentDetailService.formatUploadDate(documentData.uploadedAt)}</p>
                   )}
                   <p className="mt-3 text-sm text-primary">
                     {documentData?.incidentDescription ?? 'Opis zdarzenia pojawi się po zakończeniu analizy.'}
@@ -293,7 +196,7 @@ export default function DocumentDetail() {
                 <div className="flex flex-col gap-3 sm:items-end">
                   {documentData && (
                     <span
-                      className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(documentData.analysisStatus)}`}
+                      className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${documentDetailService.getStatusBadgeClasses(documentData.analysisStatus)}`}
                     >
                       {formatStatus(documentData.analysisStatus)}
                     </span>
@@ -309,6 +212,12 @@ export default function DocumentDetail() {
               </div>
             </div>
           </div>
+
+          {remoteError && (
+            <div className="mb-6 rounded-lg border border-(--color-error) bg-(--color-error-softest) px-4 py-3 text-sm text-(--color-error)">
+              {remoteError}
+            </div>
+          )}
 
           {!documentData && isLoading && (
             <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-6 text-sm text-muted">
@@ -349,8 +258,8 @@ export default function DocumentDetail() {
               <section>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Ocena przesłanek</p>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {ASSESSMENT_SECTIONS.map((section) => {
-                    const entry = resolveAssessmentEntry(section.key);
+                  {DOCUMENT_DETAIL_ASSESSMENT_SECTIONS.map((section) => {
+                    const entry = documentDetailService.getAssessmentEntry(documentData, section.key);
                     if (!entry) {
                       return null;
                     }
@@ -358,7 +267,7 @@ export default function DocumentDetail() {
                     return (
                       <div
                         key={section.key}
-                        className={`flex h-full flex-col justify-between rounded-2xl border p-3 shadow-sm ${getAssessmentCardOutline(entry.status)}`}
+                        className={`flex h-full flex-col justify-between rounded-2xl border p-3 shadow-sm ${documentDetailService.getAssessmentCardOutline(entry.status)}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 space-y-2">
@@ -366,9 +275,9 @@ export default function DocumentDetail() {
                             <p className="text-xs leading-snug text-secondary">{section.helper}</p>
                           </div>
                           <span
-                            className={`rounded-full border px-3 py-1 text-xs font-semibold shadow-sm ${getAssessmentStatusClasses(entry.status)}`}
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold shadow-sm ${documentDetailService.getAssessmentStatusClasses(entry.status)}`}
                           >
-                            {STATUS_LABEL[entry.status]}
+                            {documentDetailService.getAssessmentStatusLabel(entry.status)}
                           </span>
                         </div>
                         <p className="mt-3 flex-1 text-sm leading-relaxed text-primary">{entry.summary}</p>
