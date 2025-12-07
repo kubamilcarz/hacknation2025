@@ -15,6 +15,8 @@ from tools.ocr import ocr_img, ocr_pdf
 from pytesseract import TesseractNotFoundError
 
 
+chat_client = ChatGPTClient()
+
 @api_view(["GET"])
 def health(request):
     return Response({"status": "ok"})
@@ -90,86 +92,88 @@ def read_document_from_pdf_view(request):
     serializer = DocumentSerializer(document)
     return JsonResponse(serializer.data, safe=False)
 
-
-@csrf_exempt
-def ocr_images_view(request):
-    if request.method != "POST":
-        return HttpResponse("Only POST allowed", status=405, content_type="text/plain")
-
-    # Accept multiple files under key 'images'. Also support single 'image'.
-    files = request.FILES.getlist("images")
-    if not files and "image" in request.FILES:
-        files = [request.FILES["image"]]
-
-    if not files:
-        return HttpResponse("No images uploaded. Use field 'images' (multiple) or 'image' (single).", status=400, content_type="text/plain")
-
-    lang = request.POST.get("lang") or request.GET.get("lang") or "pol"
-
-    try:
-        results = ocr_img(files, lang=lang)
-    except TesseractNotFoundError:
-        msg = (
-            "Tesseract OCR binary not found.\n"
-            "Install Tesseract and ensure it's on PATH, or set env var TESSERACT_CMD to the binary path.\n"
-            "Examples: Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-pol; "
-            "macOS: brew install tesseract; Windows: install from https://github.com/UB-Mannheim/tesseract/wiki"
-        )
-        return HttpResponse(msg, status=500, content_type="text/plain")
-    except ValueError as e:
-        # Likely missing language data
-        return HttpResponse(str(e), status=500, content_type="text/plain")
-    except Exception as e:
-        return HttpResponse(f"OCR failed: {e}", status=500, content_type="text/plain")
+#
+# @csrf_exempt
+# def ocr_images_view(request):
+#     if request.method != "POST":
+#         return HttpResponse("Only POST allowed", status=405, content_type="text/plain")
+#
+#     # Accept multiple files under key 'images'. Also support single 'image'.
+#     files = request.FILES.getlist("images")
+#     if not files and "image" in request.FILES:
+#         files = [request.FILES["image"]]
+#
+#     if not files:
+#         return HttpResponse("No images uploaded. Use field 'images' (multiple) or 'image' (single).", status=400, content_type="text/plain")
+#
+#     lang = request.POST.get("lang") or request.GET.get("lang") or "pol"
+#
+#     try:
+#         results = ocr_img(files, lang=lang)
+#     except TesseractNotFoundError:
+#         msg = (
+#             "Tesseract OCR binary not found.\n"
+#             "Install Tesseract and ensure it's on PATH, or set env var TESSERACT_CMD to the binary path.\n"
+#             "Examples: Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-pol; "
+#             "macOS: brew install tesseract; Windows: install from https://github.com/UB-Mannheim/tesseract/wiki"
+#         )
+#         return HttpResponse(msg, status=500, content_type="text/plain")
+#     except ValueError as e:
+#         # Likely missing language data
+#         return HttpResponse(str(e), status=500, content_type="text/plain")
+#     except Exception as e:
+#         return HttpResponse(f"OCR failed: {e}", status=500, content_type="text/plain")
 
     return JsonResponse({"lang": lang, "results": results}, safe=False)
 
 
+# @csrf_exempt
+# def ocr_pdf_view(request):
+#     if request.method != "POST":
+#         return HttpResponse("Only POST allowed", status=405, content_type="text/plain")
+#
+#     pdf_file = request.FILES.get("pdf")
+#     if not pdf_file:
+#         return HttpResponse("No PDF uploaded. Use field 'pdf' with a PDF file.", status=400, content_type="text/plain")
+#
+#     lang = request.POST.get("lang") or request.GET.get("lang") or "pol"
+#     dpi_val = request.POST.get("dpi") or request.GET.get("dpi")
+#     try:
+#         dpi = int(dpi_val) if dpi_val else 300
+#     except ValueError:
+#         return HttpResponse("Invalid dpi value", status=400, content_type="text/plain")
+#
+#     try:
+#         result = ocr_pdf(pdf_file, lang=lang, dpi=dpi)
+#     except TesseractNotFoundError:
+#         msg = (
+#             "Tesseract OCR binary not found.\n"
+#             "Install Tesseract and ensure it's on PATH, or set env var TESSERACT_CMD to the binary path.\n"
+#             "Examples: Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-pol; "
+#             "macOS: brew install tesseract; Windows: install from https://github.com/UB-Mannheim/tesseract/wiki"
+#         )
+#         return HttpResponse(msg, status=500, content_type="text/plain")
+#     except ValueError as e:
+#         # Likely missing language data
+#         return HttpResponse(str(e), status=500, content_type="text/plain")
+#     except Exception as e:
+#         return HttpResponse(f"OCR failed: {e}", status=500, content_type="text/plain")
+#
+#     return JsonResponse({"lang": lang, **result}, safe=False)
+
+
 @csrf_exempt
-def ocr_pdf_view(request):
-    if request.method != "POST":
-        return HttpResponse("Only POST allowed", status=405, content_type="text/plain")
-
-    pdf_file = request.FILES.get("pdf")
-    if not pdf_file:
-        return HttpResponse("No PDF uploaded. Use field 'pdf' with a PDF file.", status=400, content_type="text/plain")
-
-    lang = request.POST.get("lang") or request.GET.get("lang") or "pol"
-    dpi_val = request.POST.get("dpi") or request.GET.get("dpi")
-    try:
-        dpi = int(dpi_val) if dpi_val else 300
-    except ValueError:
-        return HttpResponse("Invalid dpi value", status=400, content_type="text/plain")
-
-    try:
-        result = ocr_pdf(pdf_file, lang=lang, dpi=dpi)
-    except TesseractNotFoundError:
-        msg = (
-            "Tesseract OCR binary not found.\n"
-            "Install Tesseract and ensure it's on PATH, or set env var TESSERACT_CMD to the binary path.\n"
-            "Examples: Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-pol; "
-            "macOS: brew install tesseract; Windows: install from https://github.com/UB-Mannheim/tesseract/wiki"
-        )
-        return HttpResponse(msg, status=500, content_type="text/plain")
-    except ValueError as e:
-        # Likely missing language data
-        return HttpResponse(str(e), status=500, content_type="text/plain")
-    except Exception as e:
-        return HttpResponse(f"OCR failed: {e}", status=500, content_type="text/plain")
-
-    return JsonResponse({"lang": lang, **result}, safe=False)
-
-
-@csrf_exempt
-def upload_pdf_view(request):
+def zus_recommendation_view(request):
     pdf_file = request.FILES.get("pdf")
     if not pdf_file:
         return HttpResponse("No PDF uploaded. Use field 'pdf' with a PDF file.",
                             status=400, content_type="text/plain")
     try:
         text = ocr_pdf(pdf_file)
-        desc = ChatGPTClient().find_desc_from_pdf(text)
-        return HttpResponse(desc, content_type="text/plain")
+        data = chat_client.find_desc_from_pdf(text)
+        recommendation = chat_client.worker_recommendation(data)
+        return JsonResponse(data=recommendation, safe=False)
+
     except TesseractNotFoundError:
         msg = (
             "Tesseract OCR binary not found.\n"
@@ -182,3 +186,14 @@ def upload_pdf_view(request):
         return HttpResponse(str(e), status=500, content_type="text/plain")
     except Exception as e:
         return HttpResponse(f"OCR failed: {e}", status=500, content_type="text/plain")
+
+
+@csrf_exempt
+def user_recommendation_view(request):
+    request_data = json.loads(request.body)
+
+    data = request_data.get("data")
+    field_name = request_data.get("field_name")
+    history = request_data.get("history")
+
+    return JsonResponse(chat_client.user_recommendation(data, field_name, history), safe=False)

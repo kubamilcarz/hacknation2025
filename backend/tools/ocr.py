@@ -123,7 +123,7 @@ def _pixmap_to_pil(pix: fitz.Pixmap) -> Image.Image:
     return img
 
 
-def ocr_pdf(pdf: Any, lang: str = "pol", dpi: int = 300) -> dict:
+def ocr_pdf(pdf: Any, lang: str = "pol", dpi: int = 300) -> str:
     """OCR a multi‑page scanned PDF and return recognized text.
 
     Args:
@@ -165,30 +165,28 @@ def ocr_pdf(pdf: Any, lang: str = "pol", dpi: int = 300) -> dict:
             # Explicit, helpful error instead of silently returning nothing
             raise ValueError("PDF has no pages (page_count == 0)")
 
-        # for i in range(page_count):
-        #     page = doc.load_page(i)
+        for i in range(page_count):
+            page = doc.load_page(i)
             # Render page to pixmap (RGB)
-        page = doc.load_page(3)
-        pix = page.get_pixmap(matrix=mat, alpha=False)
-        try:
-            img = _pixmap_to_pil(pix)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
             try:
-                text = pytesseract.image_to_string(img, lang=lang)
-            finally:
+                img = _pixmap_to_pil(pix)
                 try:
-                    img.close()
-                except Exception:
-                    pass
-        finally:
-            # PyMuPDF Pixmap auto-frees when out of scope, but be explicit
-            del pix
+                    text = pytesseract.image_to_string(img, lang=lang)
+                finally:
+                    try:
+                        img.close()
+                    except Exception:
+                        pass
+            finally:
+                # PyMuPDF Pixmap auto-frees when out of scope, but be explicit
+                del pix
 
-        return text
-        # pages.append({"index": i, "text": text})
-        # all_text_parts.append(text)
-        #
-        # combined = "\n\n".join(all_text_parts)
-        # return {"name": name, "pages": pages, "text": combined}
+            pages.append({"index": i, "text": text})
+            all_text_parts.append(text)
+
+        combined = "\n\n".join(all_text_parts)
+        return combined
     finally:
         doc.close()
 
