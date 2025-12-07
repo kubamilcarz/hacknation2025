@@ -154,9 +154,9 @@ export function AccidentStepSection() {
   const authorityFeedback = useAiFeedback('organ_postepowania', incidentDraft.organ_postepowania ?? '');
   const machineDescriptionFeedback = useAiFeedback('opis_maszyn', machineInvolved ? incidentDraft.opis_maszyn ?? '' : '');
 
-  const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult) => {
+  const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult, fallbackHint: React.ReactNode) => {
     if (feedback.isIdle) {
-      return null;
+      return fallbackHint;
     }
 
     if (feedback.isError) {
@@ -203,7 +203,7 @@ export function AccidentStepSection() {
       );
     }
 
-    return null;
+    return fallbackHint;
   };
 
   return (
@@ -254,12 +254,16 @@ export function AccidentStepSection() {
             error={validationErrors.miejsce_wypadku}
             hint="Opisz gdzie doszło do zdarzenia (np. adres, stanowisko pracy, hala)."
           />
-          <div>
+          <div className="md:mt-7">
             <IncidentAiSuggestion>
               <div className="space-y-2">
-                <p>Wymień dokładne miejsce: budynek, piętro, stanowisko lub strefę. Dodaj warunki otoczenia (np. śliska podłoga, rusztowanie).</p>
-                <p className="text-xs text-muted">Przykład: „Hala A, stanowisko pakowania nr 4, przy taśmie transportowej”.</p>
-                {renderAiFeedbackMessage(locationFeedback)}
+                {renderAiFeedbackMessage(
+                  locationFeedback,
+                  <>
+                    <p>Wymień dokładne miejsce: budynek, piętro, stanowisko lub strefę. Dodaj warunki otoczenia (np. śliska podłoga, rusztowanie).</p>
+                    <p className="text-xs text-muted">Przykład: „Hala A, stanowisko pakowania nr 4, przy taśmie transportowej”.</p>
+                  </>,
+                )}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -275,12 +279,16 @@ export function AccidentStepSection() {
             error={validationErrors.rodzaj_urazow}
             hint="Wypisz urazy lub dolegliwości (np. skręcenie nadgarstka, skaleczenie dłoni)."
           />
-          <div>
+          <div className="md:mt-7">
             <IncidentAiSuggestion>
               <div className="space-y-2">
-                <p>Opisz urazy według części ciała oraz stopnia obrażeń. Wspomnij o objawach (ból, obrzęk, utrata przytomności).</p>
-                <p className="text-xs text-muted">Przykład: „Stłuczenie barku prawej ręki, otarcia dłoni, ból przy podnoszeniu”.</p>
-                {renderAiFeedbackMessage(injuriesFeedback)}
+                {renderAiFeedbackMessage(
+                  injuriesFeedback,
+                  <>
+                    <p>Opisz urazy według części ciała oraz stopnia obrażeń. Wspomnij o objawach (ból, obrzęk, utrata przytomności).</p>
+                    <p className="text-xs text-muted">Przykład: „Stłuczenie barku prawej ręki, otarcia dłoni, ból przy podnoszeniu”.</p>
+                  </>,
+                )}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -305,16 +313,20 @@ export function AccidentStepSection() {
             hint="Zacznij od czasu i miejsca, dopisz wykonywane czynności oraz co spowodowało zdarzenie. Możesz pisać zdaniami lub w punktach."
             hideLabel
           />
-          <div className="h-full">
+          <div className="h-full md:mt-2">
             <IncidentAiSuggestion>
               <div className="space-y-2">
-                <p>
-                  Odpowiedz kolejno na pytania: <strong>kiedy</strong> (data i godzina), <strong>gdzie</strong> (miejsce), <strong>co robiłeś</strong> oraz <strong>co doprowadziło</strong> do urazu. Wspomnij też o sprzęcie i świadkach, jeśli byli.
-                </p>
-                <p className="text-xs text-muted">
-                  Przykład: &quot;12 marca około 10:30 na budowie przy ul. Zielonej montowałem barierki. Podczas przenoszenia elementu poślizgnąłem się na mokrej podłodze i skręciłem nadgarstek.&quot;
-                </p>
-                {renderAiFeedbackMessage(accidentDetailsFeedback)}
+                {renderAiFeedbackMessage(
+                  accidentDetailsFeedback,
+                  <>
+                    <p>
+                      Odpowiedz kolejno na pytania: <strong>kiedy</strong> (data i godzina), <strong>gdzie</strong> (miejsce), <strong>co robiłeś</strong> oraz <strong>co doprowadziło</strong> do urazu. Wspomnij też o sprzęcie i świadkach, jeśli byli.
+                    </p>
+                    <p className="text-xs text-muted">
+                      Przykład: &quot;12 marca około 10:30 na budowie przy ul. Zielonej montowałem barierki. Podczas przenoszenia elementu poślizgnąłem się na mokrej podłodze i skręciłem nadgarstek.&quot;
+                    </p>
+                  </>,
+                )}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -340,12 +352,16 @@ export function AccidentStepSection() {
               error={validationErrors.miejsce_udzielenia_pomocy}
               hint="Podaj nazwę placówki lub osoby udzielającej pomocy."
             />
-            <div>
+            <div className="md:mt-7">
               <IncidentAiSuggestion>
                 <div className="space-y-2">
-                  <p>Wskaż punkt medyczny, karetkę lub osobę, która pomogła, oraz zakres udzielonej pomocy (np. opatrunek, leki przeciwbólowe).</p>
-                  <p className="text-xs text-muted">Przykład: „SOR Szpitala Wojewódzkiego w Krakowie, opatrunek i stabilizacja nadgarstka”.</p>
-                  {renderAiFeedbackMessage(medicalHelpPlaceFeedback)}
+                  {renderAiFeedbackMessage(
+                    medicalHelpPlaceFeedback,
+                    <>
+                      <p>Wskaż punkt medyczny, karetkę lub osobę, która pomogła, oraz zakres udzielonej pomocy (np. opatrunek, leki przeciwbólowe).</p>
+                      <p className="text-xs text-muted">Przykład: „SOR Szpitala Wojewódzkiego w Krakowie, opatrunek i stabilizacja nadgarstka”.</p>
+                    </>,
+                  )}
                 </div>
               </IncidentAiSuggestion>
             </div>
@@ -365,12 +381,16 @@ export function AccidentStepSection() {
             optional
             hint="Wpisz instytucję (np. policja, PIP), jeśli prowadziła postępowanie."
           />
-          <div>
+          <div className="md:mt-7">
             <IncidentAiSuggestion>
               <div className="space-y-2">
-                <p>Podaj nazwę jednostki, numer sprawy lub dane kontaktowe inspektora, jeśli je masz. Wspomnij o statusie działań.</p>
-                <p className="text-xs text-muted">Przykład: „Komenda Policji Kraków-Podgórze, notatka służbowa nr 12/2025, brak decyzji”.</p>
-                {renderAiFeedbackMessage(authorityFeedback)}
+                {renderAiFeedbackMessage(
+                  authorityFeedback,
+                  <>
+                    <p>Podaj nazwę jednostki, numer sprawy lub dane kontaktowe inspektora, jeśli je masz. Wspomnij o statusie działań.</p>
+                    <p className="text-xs text-muted">Przykład: „Komenda Policji Kraków-Podgórze, notatka służbowa nr 12/2025, brak decyzji”.</p>
+                  </>,
+                )}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -398,12 +418,16 @@ export function AccidentStepSection() {
                 error={validationErrors.opis_maszyn}
                 hint="Opisz maszynę, jej stan lub sposób użytkowania."
               />
-              <div>
+              <div className="md:mt-7">
                 <IncidentAiSuggestion>
                   <div className="space-y-2">
-                    <p>Wymień typ, model, numer seryjny i opisz, jak maszyna była przygotowana. Dodaj informację o zabezpieczeniach lub usterkach.</p>
-                    <p className="text-xs text-muted">Przykład: „Podnośnik nożycowy JLG 3246ES, przegląd 02.2025, poślizg przy opuszczaniu platformy”.</p>
-                    {renderAiFeedbackMessage(machineDescriptionFeedback)}
+                    {renderAiFeedbackMessage(
+                      machineDescriptionFeedback,
+                      <>
+                        <p>Wymień typ, model, numer seryjny i opisz, jak maszyna była przygotowana. Dodaj informację o zabezpieczeniach lub usterkach.</p>
+                        <p className="text-xs text-muted">Przykład: „Podnośnik nożycowy JLG 3246ES, przegląd 02.2025, poślizg przy opuszczaniu platformy”.</p>
+                      </>,
+                    )}
                   </div>
                 </IncidentAiSuggestion>
               </div>

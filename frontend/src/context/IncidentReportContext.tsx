@@ -47,6 +47,15 @@ const STEPS: IncidentWizardStep[] = [
     id: 'accident',
     title: 'Opis zdarzenia',
     description: 'Opisz własnymi słowami, kiedy i gdzie doszło do zdarzenia.',
+    info: {
+      label: 'Jak opisać zdarzenie?',
+      content: (
+        <div className="space-y-2">
+          <p>Podaj kolejno datę, godzinę, miejsce, wykonywane czynności oraz co dokładnie spowodowało uraz.</p>
+          <p>Wspomnij o używanym sprzęcie, świadkach i pierwszej reakcji po wypadku. Te informacje pomagają ZUS szybciej ocenić zdarzenie.</p>
+        </div>
+      ),
+    },
   },
   {
     id: 'witnesses',
