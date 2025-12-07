@@ -191,20 +191,28 @@ interface DocumentApi {
   getById(id: number): Promise<DocumentDetailDto | null>;
   create(payload: CreateDocumentDto): Promise<DocumentDetailDto>;
   downloadAttachment(id: number, format: "docx" | "pdf"): Promise<void>;
-  setExportFormat(format: DocumentExportFormat): void;
 }
 
 class DefaultDocumentService implements DocumentService {
+  private pendingExportFormat: DocumentExportFormat | null = null;
+
   constructor(private readonly api: DocumentApi) {}
 
   setExportFormat(format: DocumentExportFormat) {
-    this.api.setExportFormat(format);
+    this.pendingExportFormat = format;
   }
 
   async list(options?: DocumentListOptions): Promise<DocumentListResponse> {
     const responseDto = await this.api.list(options);
+    const documents = responseDto.items.map(mapDocumentListItemDtoToDocument);
+
+    const exportFormat = this.consumePendingExportFormat();
+    if (exportFormat) {
+      this.handleExport(exportFormat, documents);
+    }
+
     return {
-      items: responseDto.items.map(mapDocumentListItemDtoToDocument),
+      items: exportFormat ? [] : documents,
       totalCount: responseDto.totalCount,
       totalPages: responseDto.totalPages,
       page: responseDto.page,
@@ -226,6 +234,32 @@ class DefaultDocumentService implements DocumentService {
   async downloadAttachment(id: number, format: "docx" | "pdf") {
     await this.api.downloadAttachment(id, format);
   }
+
+  private consumePendingExportFormat() {
+    const format = this.pendingExportFormat;
+    this.pendingExportFormat = null;
+    return format;
+  }
+
+  private handleExport(format: DocumentExportFormat, documents: Document[]) {
+    switch (format) {
+      case "csv":
+        downloadCsv(documents);
+        break;
+      case "excel":
+        downloadExcel(documents);
+        break;
+      case "json":
+        downloadJson(documents);
+        break;
+      case "pdf":
+        downloadPdf(documents);
+        break;
+      default:
+        console.warn("Nieobsługiwany format eksportu dokumentów:", format);
+        break;
+    }
+  }
 }
 
 type HttpDocumentApiOptions = {
@@ -240,11 +274,6 @@ class HttpDocumentApi implements DocumentApi {
     const normalizedBase = (options.baseUrl ?? DEFAULT_BACKEND_URL).trim();
     this.baseUrl = normalizedBase.length > 0 ? normalizedBase : DEFAULT_BACKEND_URL;
     this.documentsUrl = buildEndpoint(this.baseUrl, DOCUMENTS_ENDPOINT);
-  }
-
-  setExportFormat(format: DocumentExportFormat) {
-    // Backend does not yet expose export format handling.
-    void format;
   }
 
   async list(options?: DocumentListOptions): Promise<DocumentListResponseDto> {
@@ -311,7 +340,10 @@ class HttpDocumentApi implements DocumentApi {
   }
 
   async create(payload: CreateDocumentDto): Promise<DocumentDetailDto> {
-    const { witnesses: _witnesses, ...documentPayload } = payload;
+    const { witnesses, ...documentPayload } = payload;
+    if (Array.isArray(witnesses) && witnesses.length > 0) {
+      console.warn("Backend create endpoint nie obsługuje jeszcze zapisu świadków. Dane zostaną pominięte.");
+    }
     let response: Response;
 
     try {
@@ -323,6 +355,7 @@ class HttpDocumentApi implements DocumentApi {
         body: JSON.stringify({ action: "create", ...documentPayload }),
       });
     } catch (error) {
+      console.error("Nie udało się wysłać zgłoszenia do backendu", error);
       throw new Error("Nie udało się połączyć z serwerem. Sprawdź połączenie i spróbuj ponownie.");
     }
 
@@ -343,6 +376,8 @@ class HttpDocumentApi implements DocumentApi {
   }
 
   async downloadAttachment(id: number, format: "docx" | "pdf"): Promise<void> {
+    void id;
+    void format;
     throw new Error("Pobieranie dokumentów nie jest jeszcze dostępne w trybie API.");
   }
 }
@@ -403,13 +438,32 @@ async function safeReadError(response: Response): Promise<string | null> {
         }
       }
     } catch (error) {
-      // Ignore JSON parse errors and fall back to raw text.
+      void error; // Ignorujemy błędy parsowania JSON i używamy surowego tekstu.
     }
 
     return text;
   } catch (error) {
+    console.error("Nie udało się odczytać treści błędu z odpowiedzi backendu", error);
     return null;
   }
+}
+
+function downloadCsv(items: Document[]) {
+  const header = EXPORT_COLUMNS.map((column) => column.label);
+  const rows = items.map((document) =>
+    EXPORT_COLUMNS.map((column) => {
+      const rawValue = column.accessor(document);
+      const normalized = rawValue == null ? "" : String(rawValue);
+      return `"${normalized.replace(/"/g, '""')}"`;
+    })
+  );
+
+  const csv = [header.map((label) => `"${label.replace(/"/g, '""')}"`), ...rows]
+    .map((row) => row.join(";"))
+    .join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  downloadBlob(blob, "csv");
 }
 
 function downloadExcel(items: Document[]) {

@@ -321,6 +321,36 @@ const createInitialIncidentDraft = (): CreateDocumentInput => ({
   witnesses: [],
 });
 
+const BACKEND_REQUIRED_STRING_FIELDS = [
+  'pesel',
+  'nr_dowodu',
+  'imie',
+  'nazwisko',
+  'ulica',
+  'data_wypadku',
+  'godzina_wypadku',
+  'miejsce_wypadku',
+  'planowana_godzina_rozpoczecia_pracy',
+  'planowana_godzina_zakonczenia_pracy',
+  'rodzaj_urazow',
+  'szczegoly_okolicznosci',
+] as const;
+
+type BackendRequiredField = (typeof BACKEND_REQUIRED_STRING_FIELDS)[number];
+
+const ensureBackendRequiredFields = (draft: CreateDocumentInput): CreateDocumentInput => {
+  const normalized = { ...draft } satisfies CreateDocumentInput;
+
+  BACKEND_REQUIRED_STRING_FIELDS.forEach((field) => {
+    const value = normalized[field];
+    if (typeof value === 'string' && value.trim().length === 0) {
+      normalized[field] = defaultDocumentData[field] as CreateDocumentInput[BackendRequiredField];
+    }
+  });
+
+  return normalized;
+};
+
 type InputChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEvent<HTMLInputElement>) => void;
 type TextareaChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEvent<HTMLTextAreaElement>) => void;
 type WitnessInputChangeHandler = (index: number, field: WitnessEditableField) => (event: ChangeEvent<HTMLInputElement>) => void;
@@ -777,7 +807,9 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
         szczegoly_okolicznosci: (incidentDraft.szczegoly_okolicznosci ?? '').trim(),
       };
 
-      const createdDocument = await documentService.create(payload);
+      const backendReadyPayload = ensureBackendRequiredFields(payload);
+
+      const createdDocument = await documentService.create(backendReadyPayload);
 
       const summaryDocument: Document = {
         ...createdDocument,
