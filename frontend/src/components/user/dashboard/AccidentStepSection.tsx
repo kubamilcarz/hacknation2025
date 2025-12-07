@@ -2,8 +2,12 @@ import { useRef, type ChangeEvent } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
+import { Spinner } from '@/components/Spinner';
+import { useAiFeedback } from '@/context/AiFeedbackContext';
 import { useIncidentReport } from '@/context/IncidentReportContext';
 import { formatFileSize } from '@/lib/utils/formatFileSize';
+
+type AiFeedbackHookResult = ReturnType<typeof useAiFeedback>;
 
 export function AccidentStepSection() {
   const {
@@ -140,6 +144,68 @@ export function AccidentStepSection() {
   const machineHasCertificate = incidentDraft.czy_maszyna_posiada_atest ?? null;
   const machineRegistered = incidentDraft.czy_maszyna_w_ewidencji ?? null;
 
+  const accidentDetailsFeedback = useAiFeedback('szczegoly_okolicznosci', incidentDraft.szczegoly_okolicznosci ?? '');
+  const locationFeedback = useAiFeedback('miejsce_wypadku', incidentDraft.miejsce_wypadku ?? '');
+  const injuriesFeedback = useAiFeedback('rodzaj_urazow', incidentDraft.rodzaj_urazow ?? '');
+  const medicalHelpPlaceFeedback = useAiFeedback(
+    'miejsce_udzielenia_pomocy',
+    medicalHelpProvided ? incidentDraft.miejsce_udzielenia_pomocy ?? '' : '',
+  );
+  const authorityFeedback = useAiFeedback('organ_postepowania', incidentDraft.organ_postepowania ?? '');
+  const machineDescriptionFeedback = useAiFeedback('opis_maszyn', machineInvolved ? incidentDraft.opis_maszyn ?? '' : '');
+
+  const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult) => {
+    if (feedback.isIdle) {
+      return null;
+    }
+
+    if (feedback.isError) {
+      return (
+        <div className="rounded-md border border-dashed border-(--color-error) bg-(--color-error-soft) px-3 py-2 text-xs text-(--color-error)">
+          <div className="flex items-center justify-between gap-3">
+            <span>{feedback.error}</span>
+            <button
+              type="button"
+              onClick={feedback.refresh}
+              className="text-xs font-semibold text-(--color-error) underline underline-offset-2"
+            >
+              Spróbuj ponownie
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (feedback.isLoading) {
+      return (
+        <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-secondary">
+          <span className="flex items-center gap-2">
+            <Spinner size={14} />
+            Generuję podpowiedź…
+          </span>
+        </div>
+      );
+    }
+
+    if (feedback.isDebouncing) {
+      return (
+        <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-muted">
+          Analizuję wpis…
+        </div>
+      );
+    }
+
+    if (feedback.message) {
+      return (
+        <div className="rounded-md border border-dashed border-subtle bg-(--color-accent-soft) px-3 py-2 text-xs text-secondary">
+          {feedback.message}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <IncidentWizardSection>
       <div className="md:col-span-2 space-y-6">
@@ -193,6 +259,7 @@ export function AccidentStepSection() {
               <div className="space-y-2">
                 <p>Wymień dokładne miejsce: budynek, piętro, stanowisko lub strefę. Dodaj warunki otoczenia (np. śliska podłoga, rusztowanie).</p>
                 <p className="text-xs text-muted">Przykład: „Hala A, stanowisko pakowania nr 4, przy taśmie transportowej”.</p>
+                {renderAiFeedbackMessage(locationFeedback)}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -213,6 +280,7 @@ export function AccidentStepSection() {
               <div className="space-y-2">
                 <p>Opisz urazy według części ciała oraz stopnia obrażeń. Wspomnij o objawach (ból, obrzęk, utrata przytomności).</p>
                 <p className="text-xs text-muted">Przykład: „Stłuczenie barku prawej ręki, otarcia dłoni, ból przy podnoszeniu”.</p>
+                {renderAiFeedbackMessage(injuriesFeedback)}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -246,6 +314,7 @@ export function AccidentStepSection() {
                 <p className="text-xs text-muted">
                   Przykład: &quot;12 marca około 10:30 na budowie przy ul. Zielonej montowałem barierki. Podczas przenoszenia elementu poślizgnąłem się na mokrej podłodze i skręciłem nadgarstek.&quot;
                 </p>
+                {renderAiFeedbackMessage(accidentDetailsFeedback)}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -276,6 +345,7 @@ export function AccidentStepSection() {
                 <div className="space-y-2">
                   <p>Wskaż punkt medyczny, karetkę lub osobę, która pomogła, oraz zakres udzielonej pomocy (np. opatrunek, leki przeciwbólowe).</p>
                   <p className="text-xs text-muted">Przykład: „SOR Szpitala Wojewódzkiego w Krakowie, opatrunek i stabilizacja nadgarstka”.</p>
+                  {renderAiFeedbackMessage(medicalHelpPlaceFeedback)}
                 </div>
               </IncidentAiSuggestion>
             </div>
@@ -300,6 +370,7 @@ export function AccidentStepSection() {
               <div className="space-y-2">
                 <p>Podaj nazwę jednostki, numer sprawy lub dane kontaktowe inspektora, jeśli je masz. Wspomnij o statusie działań.</p>
                 <p className="text-xs text-muted">Przykład: „Komenda Policji Kraków-Podgórze, notatka służbowa nr 12/2025, brak decyzji”.</p>
+                {renderAiFeedbackMessage(authorityFeedback)}
               </div>
             </IncidentAiSuggestion>
           </div>
@@ -332,6 +403,7 @@ export function AccidentStepSection() {
                   <div className="space-y-2">
                     <p>Wymień typ, model, numer seryjny i opisz, jak maszyna była przygotowana. Dodaj informację o zabezpieczeniach lub usterkach.</p>
                     <p className="text-xs text-muted">Przykład: „Podnośnik nożycowy JLG 3246ES, przegląd 02.2025, poślizg przy opuszczaniu platformy”.</p>
+                    {renderAiFeedbackMessage(machineDescriptionFeedback)}
                   </div>
                 </IncidentAiSuggestion>
               </div>

@@ -10,6 +10,7 @@ import { IdentityStepSection } from '@/components/user/dashboard/IdentityStepSec
 import { ResidenceStepSection } from '@/components/user/dashboard/ResidenceStepSection';
 import { ReviewStepSection } from '@/components/user/dashboard/ReviewStepSection';
 import { WitnessesStepSection } from '@/components/user/dashboard/WitnessesStepSection';
+import { AiFeedbackProvider } from '@/context/AiFeedbackContext';
 import { IncidentReportProvider, useIncidentReport } from '@/context/IncidentReportContext';
 
 function UserDashboardContent() {
@@ -96,8 +97,10 @@ function UserDashboardContent() {
 
 export default function UserDashboard() {
   return (
-    <IncidentReportProvider>
-      <UserDashboardContent />
-    </IncidentReportProvider>
+    <AiFeedbackProvider>
+      <IncidentReportProvider>
+        <UserDashboardContent />
+      </IncidentReportProvider>
+    </AiFeedbackProvider>
   );
 }
