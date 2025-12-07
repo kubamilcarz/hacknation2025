@@ -77,7 +77,7 @@ const PDF_FONT_VARIANTS: PdfFontVariant[] = [
 let pdfFontRegistrationPromise: Promise<Record<string, string>> | null = null;
 
 const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-const PDF_UPLOAD_ENDPOINT = "/api/upload-pdf/";
+const PDF_UPLOAD_ENDPOINT = "/api/zus-recommendation/";
 
 export type EmployeeDocumentListSortField = "uploaded_at" | "file_name" | "analysis_status";
 
