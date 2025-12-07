@@ -114,6 +114,8 @@ With both processes running, visit `http://localhost:3000` for the citizen flow 
 2. AI feedback reveals missing facts in each free-text field (typing triggers hints after debounce).
 3. On completion, download the filled ZUS notification PDF; optionally request an anonymised copy for sharing.
 
+![Ekran kreatora zgłoszenia z podpowiedziami AI](.readme-assets/wizard.png)
+
 ### Caseworker dashboard (`/dashboard/employee`)
 
 - **Search & filters**: full-text search, status filters (`processing`, `completed`, `failed`), column sorting, pagination.
@@ -121,11 +123,15 @@ With both processes running, visit `http://localhost:3000` for the citizen flow 
 - **AI recommendations**: review automatically generated scoring of statutory conditions, completeness scores, follow-up questions, and ready-to-send responses.
 - **Accident card**: one-click generation of the official ZUS accident card (PDF) using data captured in the system.
 
+![Panel pracownika ZUS z listą dokumentów i filtrowaniem](.readme-assets/document.png)
+
 ### Sample data & demos
 
 - Use `backend/ocr/create_sample_pdf.py` to craft mock accident descriptions for demos.
 - The JSON payload in `backend/api/fixtures/documents.json` illustrates the fields required for form generation.
 - `backend/ocr/run_example.sh /path/to/file.pdf` runs OCR locally and stores outputs under `backend/ocr_output/`.
+
+![Podgląd wgrywania dokumentu i statusu analizy](.readme-assets/upload.png)
 
 ## REST API Surface
 
@@ -151,6 +157,8 @@ _All endpoints return JSON unless noted. PDF responses stream binary content wit
 - **LLM prompts**: `tools/chatgpt.py` centralises prompts for citizen assistance, completeness scoring, follow-up questions, and human-friendly responses.
 - **PDF tooling**: `tools/pdf_writer.py` fills template PDFs; `tools/pdf_anonymizer.py` redacts personal data; `tools/accident_card_pdf.py` renders textual cards via PyMuPDF.
 - **Mock vs live AI**: frontend defaults to a deterministic mock for faster demos; switch to live backend for real OpenAI calls.
+
+![Dostępnościowy pasek narzędzi spełniający wymagania WCAG](.readme-assets/wcag.png)
 
 ## Project Structure
 
