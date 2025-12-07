@@ -282,7 +282,7 @@ class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
   }
 
   async upload(payload: CreateEmployeeDocumentDto, fileData: Blob): Promise<EmployeeDocumentDetailDto> {
-    const description = await analyzePdfWithBackend(fileData, this.uploadUrl);
+    const description = await analyzePdfWithBackend(fileData, this.uploadUrl, payload.assessment);
     const id = this.generateId();
 
     const dto: EmployeeDocumentDetailDto = {
@@ -292,6 +292,7 @@ class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
       analysis_status: description.status,
       incident_description: description.text,
       description_source: description.source,
+      assessment: description.assessment,
     };
 
     this.documents = [{ ...dto }, ...this.documents];
@@ -476,17 +477,27 @@ async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDoc
   };
 }
 
+type AssessmentDto = EmployeeDocumentDetailDto["assessment"];
+type AssessmentStatusDto = AssessmentDto["suddenness"]["status"];
+
 type PdfAnalysisResult = {
   text: string;
   status: EmployeeDocumentDetailDto["analysis_status"];
   source: "ai" | "manual";
+  assessment: AssessmentDto;
 };
 
-async function analyzePdfWithBackend(fileData: Blob, uploadUrl: string): Promise<PdfAnalysisResult> {
+async function analyzePdfWithBackend(
+  fileData: Blob,
+  uploadUrl: string,
+  baselineAssessment: AssessmentDto,
+): Promise<PdfAnalysisResult> {
+  const fallbackAssessment = cloneAssessmentDto(baselineAssessment);
   const fallback: PdfAnalysisResult = {
     text: "Nie udało się odczytać opisu z przesłanego pliku. Uzupełnij dane ręcznie.",
     status: "failed",
     source: "manual",
+    assessment: fallbackAssessment,
   };
 
   const formData = new FormData();
@@ -514,16 +525,232 @@ async function analyzePdfWithBackend(fileData: Blob, uploadUrl: string): Promise
       };
     }
 
-    const description = (await response.text().catch(() => "")).trim();
+    const rawBody = (await response.text().catch(() => "")).trim();
+    if (!rawBody) {
+      return {
+        ...fallback,
+        status: "completed",
+        source: "ai",
+      };
+    }
+
+    const parsedPrimary = safeParseJson(rawBody);
+    const parsed = typeof parsedPrimary === "string" ? safeParseJson(parsedPrimary) : parsedPrimary;
+    if (!parsed || !isPlainObject(parsed)) {
+      return {
+        text: rawBody,
+        status: "completed",
+        source: "ai",
+        assessment: cloneAssessmentDto(baselineAssessment),
+      };
+    }
+
+    const assessment = mapBackendAssessment(parsed.ocena_przeslanek, baselineAssessment);
+    const summary = buildIncidentSummary(parsed);
+    const normalizedSummary = summary.trim().length > 0 ? summary.trim() : fallback.text;
     return {
-      text: description.length > 0 ? description : fallback.text,
+      text: normalizedSummary,
       status: "completed",
       source: "ai",
-    } satisfies PdfAnalysisResult;
+      assessment,
+    };
   } catch (error) {
     console.error("Nie udało się przetworzyć PDF na backendzie", error);
     return fallback;
   }
+}
+
+function cloneAssessmentDto(assessment: AssessmentDto): AssessmentDto {
+  return {
+    suddenness: cloneAssessmentEntry(assessment.suddenness),
+    external_cause: cloneAssessmentEntry(assessment.external_cause),
+    injury: cloneAssessmentEntry(assessment.injury),
+    work_relation: cloneAssessmentEntry(assessment.work_relation),
+  };
+}
+
+function cloneAssessmentEntry(entry: AssessmentDto["suddenness"]) {
+  return {
+    status: entry.status,
+    summary: entry.summary,
+    recommendation: entry.recommendation,
+  };
+}
+
+function mapBackendAssessment(raw: unknown, baseline: AssessmentDto): AssessmentDto {
+  const result = cloneAssessmentDto(baseline);
+  if (!isPlainObject(raw)) {
+    return result;
+  }
+
+  const mapping: Array<{ backendKey: string; targetKey: keyof AssessmentDto }> = [
+    { backendKey: "naglosc", targetKey: "suddenness" },
+    { backendKey: "przyczyna_zewnetrzna", targetKey: "external_cause" },
+    { backendKey: "uraz", targetKey: "injury" },
+    { backendKey: "zwiazek_z_praca", targetKey: "work_relation" },
+  ];
+
+  for (const { backendKey, targetKey } of mapping) {
+    const rawEntry = raw[backendKey];
+    if (!isPlainObject(rawEntry)) {
+      continue;
+    }
+    const baselineEntry = result[targetKey];
+    const status = mapBackendAssessmentStatus(rawEntry.status);
+    const summary = extractString(rawEntry.uzasadnienie) ?? baselineEntry.summary;
+    const recommendation = extractString(rawEntry.rekomendacja) ?? baselineEntry.recommendation;
+    result[targetKey] = {
+      status,
+      summary: summary && summary.length > 0 ? summary : baselineEntry.summary,
+      recommendation: recommendation && recommendation.length > 0 ? recommendation : baselineEntry.recommendation,
+    };
+  }
+
+  return result;
+}
+
+function mapBackendAssessmentStatus(value: unknown): AssessmentStatusDto {
+  if (typeof value === "boolean") {
+    return value ? "met" : "unmet";
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value >= 0.75) {
+      return "met";
+    }
+    if (value <= 0.25) {
+      return "unmet";
+    }
+    return "partial";
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "tak", "spełniona", "spelniona", "met", "ok", "yes", "pełna", "pelna", "kompletna", "complete"].includes(normalized)) {
+      return "met";
+    }
+    if (["false", "nie", "niespełniona", "niespelniona", "brak", "odrzucona", "no", "nie"].includes(normalized)) {
+      return "unmet";
+    }
+    if (["partial", "częściowa", "czesciowa", "częściowo", "czesciowo", "uzupełnić", "uzupelnic", "weryfikacja", "do_weryfikacji", "needs_verification"].includes(normalized)) {
+      return "partial";
+    }
+  }
+  return "partial";
+}
+
+function buildIncidentSummary(payload: Record<string, unknown>): string {
+  const sections: string[] = [];
+  const completeness = isPlainObject(payload.kompletnosc_wniosku) ? payload.kompletnosc_wniosku : null;
+  if (completeness) {
+    const completenessSection = buildCompletenessSection(completeness);
+    if (completenessSection) {
+      sections.push(completenessSection);
+    }
+  }
+
+  const recommendations = asStringArray(payload.rekomendacje_poprawy);
+  if (recommendations.length > 0) {
+    sections.push(formatBulletList("Rekomendacje poprawy", recommendations));
+  }
+
+  const questions = asStringArray(payload.pytania_poglebiajace);
+  if (questions.length > 0) {
+    sections.push(formatBulletList("Pytania pogłębiające", questions));
+  }
+
+  return sections.join("\n\n");
+}
+
+function buildCompletenessSection(data: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const level = extractString(data.poziom_kompletnosci);
+  const numericScore = coerceNumber(data.wynik_calkowity);
+  const summaryBits: string[] = [];
+  if (level) {
+    summaryBits.push(`Poziom kompletności: ${capitalizeFirst(level)}.`);
+  }
+  if (numericScore != null) {
+    summaryBits.push(`Wynik punktowy: ${numericScore}/18.`);
+  }
+  if (summaryBits.length > 0) {
+    parts.push(summaryBits.join(" "));
+  }
+
+  const gaps = asStringArray(data.braki);
+  if (gaps.length > 0) {
+    parts.push(formatBulletList("Braki do uzupełnienia", gaps));
+  }
+
+  const verification = asStringArray(data.elementy_do_weryfikacji);
+  if (verification.length > 0) {
+    parts.push(formatBulletList("Elementy do weryfikacji", verification));
+  }
+
+  return parts.join("\n\n");
+}
+
+function formatBulletList(title: string, items: string[]): string {
+  const normalizedItems = items.filter((item) => item.trim().length > 0);
+  if (normalizedItems.length === 0) {
+    return "";
+  }
+  const bullets = normalizedItems.map((item) => `- ${item}`).join("\n");
+  return `${title}:\n${bullets}`;
+}
+
+function extractString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  return null;
+}
+
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(/,/g, "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry ?? "").trim()))
+      .filter((entry) => entry.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+  }
+  return [];
+}
+
+function capitalizeFirst(value: string) {
+  if (!value) {
+    return value;
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function safeParseJson(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function buildEndpoint(baseUrl: string, path: string) {

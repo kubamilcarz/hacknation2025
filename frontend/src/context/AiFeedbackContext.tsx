@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AiFeedbackService } from '@/lib/services/aiFeedbackService';
+import type { AiFeedbackContextPayload, AiFeedbackService } from '@/lib/services/aiFeedbackService';
 import { createAiFeedbackService } from '@/lib/services/aiFeedbackService';
 
 type AiFeedbackStatus = 'idle' | 'debouncing' | 'loading' | 'success' | 'error';
@@ -51,6 +51,7 @@ type UseAiFeedbackReturn = AiFeedbackState & {
 
 interface UseAiFeedbackOptions {
 	metadata?: Record<string, unknown>;
+	context?: AiFeedbackContextPayload;
 }
 
 export function useAiFeedback(
@@ -65,6 +66,7 @@ export function useAiFeedback(
 
 	const { service, debounceMs } = context;
 	const metadata = options?.metadata;
+	const contextPayload = options?.context;
 	const [state, setState] = useState<AiFeedbackState>(IDLE_STATE);
 	const debounceHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const requestIdRef = useRef(0);
@@ -88,7 +90,7 @@ export function useAiFeedback(
 		}));
 
 		service
-			.getFeedback({ fieldId, text: normalizedText, metadata })
+			.getFeedback({ fieldId, text: normalizedText, metadata, context: contextPayload })
 			.then((response) => {
 				if (requestIdRef.current !== currentRequestId) {
 					return;
@@ -104,7 +106,7 @@ export function useAiFeedback(
 				const message = error instanceof Error ? error.message : 'Nie udało się pobrać podpowiedzi.';
 				setState({ status: 'error', message: null, error: message });
 			});
-	}, [fieldId, metadata, normalizedText, service]);
+	}, [contextPayload, fieldId, metadata, normalizedText, service]);
 
 	useEffect(() => {
 		clearPendingTimeout();

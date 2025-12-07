@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent, type ReactNode } from 'react';
+import { useMemo, useRef, type ChangeEvent, type ReactNode } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
@@ -48,6 +48,7 @@ export function AccidentStepSection() {
   const medicalInputRef = useRef<HTMLInputElement | null>(null);
   const additionalInputRef = useRef<HTMLInputElement | null>(null);
   const legalInputRef = useRef<HTMLInputElement | null>(null);
+  const aiContext = useMemo(() => ({ documentData: incidentDraft }), [incidentDraft]);
 
   type AttachmentItem = {
     id: string;
@@ -165,32 +166,32 @@ export function AccidentStepSection() {
   const accidentDetailsFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.accidentDetails,
     incidentDraft.szczegoly_okolicznosci ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.accidentDetails },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.accidentDetails, context: aiContext },
   );
   const locationFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.location,
     incidentDraft.miejsce_wypadku ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.location },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.location, context: aiContext },
   );
   const injuriesFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.injuries,
     incidentDraft.rodzaj_urazow ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.injuries },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.injuries, context: aiContext },
   );
   const medicalHelpPlaceFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.medicalHelpPlace,
     medicalHelpProvided ? incidentDraft.miejsce_udzielenia_pomocy ?? '' : '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.medicalHelpPlace },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.medicalHelpPlace, context: aiContext },
   );
   const authorityFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.authority,
     incidentDraft.organ_postepowania ?? '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.authority },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.authority, context: aiContext },
   );
   const machineDescriptionFeedback = useAiFeedback(
     ACCIDENT_AI_FEEDBACK_FIELDS.machineDescription,
     machineInvolved ? incidentDraft.opis_maszyn ?? '' : '',
-    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.machineDescription },
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.machineDescription, context: aiContext },
   );
 
   const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult, fallbackHint: ReactNode) => {
