@@ -23,7 +23,16 @@ export function ReviewStepSection() {
       {hasSubmittedSuccessfully ? (
         <div className="space-y-4">
           <IncidentAiSuggestion title="Formularz gotowy do pobrania">
-              Zgłoszenie zostało przygotowane w formie pliku. Pobierz dokument i przekaż go do ZUS, system nie wysyła formularza w Twoim imieniu. W razie potrzeby wróć do wcześniejszych kroków, popraw treść i przygotuj nową wersję.
+            <div className="space-y-3">
+              <p>
+                Zgłoszenie zostało przygotowane w formie pliku. Pobierz dokument (formularz zawiadomienia lub zapis wyjaśnień poszkodowanego) i przekaż go do ZUS, system nie wysyła formularza w Twoim imieniu. W razie potrzeby wróć do wcześniejszych kroków, popraw treść i przygotuj nową wersję.
+              </p>
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-secondary">
+                <li>Pobierz plik i dokładnie zapoznaj się z jego treścią.</li>
+                <li>Jeżeli akceptujesz dokument, złóż na nim podpis.</li>
+                <li>Przekaż podpisany formularz przez PUE/eZUS lub złóż go w dowolnej placówce ZUS.</li>
+              </ol>
+            </div>
           </IncidentAiSuggestion>
           {witnessStatements.length > 0 && (
             <div className="rounded-xl border border-subtle bg-surface p-4">
@@ -69,7 +78,14 @@ export function ReviewStepSection() {
         </div>
       ) : (
         <IncidentAiSuggestion>
-          Przejrzyj dane i upewnij się, że opisujesz zdarzenie tak, jak chcesz. Gdy będziesz gotowy, kliknij „Przygotuj formularz”, a otrzymasz pliki do pobrania i samodzielnego złożenia w ZUS.
+          <div className="space-y-2">
+            <p>
+              Przejrzyj dane i upewnij się, że opisujesz zdarzenie tak, jak chcesz. Gdy będziesz gotowy, kliknij „Przygotuj formularz”, a otrzymasz pliki do pobrania i samodzielnego złożenia w ZUS.
+            </p>
+            <p className="text-sm text-secondary">
+              Po wygenerowaniu dokumentu musisz go pobrać, zapoznać się z treścią, podpisać oraz przekazać za pośrednictwem PUE/eZUS lub złożyć w dowolnej placówce ZUS.
+            </p>
+          </div>
         </IncidentAiSuggestion>
       )}
       {witnessStatements.length > 0 && !hasSubmittedSuccessfully && (
