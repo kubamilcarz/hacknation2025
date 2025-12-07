@@ -31,6 +31,7 @@ interface DocumentContextValue {
   uploadDocument: (file: File) => Promise<EmployeeDocument>;
   downloadOriginalDocument: (id: number) => Promise<void>;
   downloadAnonymizedDocument: (id: number) => Promise<void>;
+  downloadAccidentCard: (id: number) => Promise<void>;
   getDocumentById: (id: number) => EmployeeDocument | undefined;
 }
 
@@ -121,6 +122,10 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     await employeeDocumentService.downloadAnonymized(id);
   }, []);
 
+  const downloadAccidentCard = useCallback(async (id: number) => {
+    await employeeDocumentService.downloadAccidentCard(id);
+  }, []);
+
   const getDocumentById = useCallback(
     (id: number) => documents.find((document) => document.id === id),
     [documents]
@@ -143,6 +148,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       uploadDocument,
       downloadOriginalDocument,
       downloadAnonymizedDocument,
+      downloadAccidentCard,
       getDocumentById,
     }),
     [
@@ -158,6 +164,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       uploadDocument,
       downloadOriginalDocument,
       downloadAnonymizedDocument,
+      downloadAccidentCard,
       getDocumentById,
     ]
   );

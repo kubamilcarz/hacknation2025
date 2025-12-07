@@ -17,7 +17,7 @@ export default function DocumentDetail() {
   const router = useRouter();
   const params = useParams<{ id?: string }>();
   const documentId = Number.parseInt(params?.id ?? '', 10);
-  const { isLoading, getDocumentById, downloadOriginalDocument, downloadAnonymizedDocument } = useDocuments();
+  const { isLoading, getDocumentById, downloadAccidentCard, downloadAnonymizedDocument } = useDocuments();
 
   const documentFromStore = useMemo(
     () => (Number.isNaN(documentId) ? undefined : getDocumentById(documentId)),
@@ -31,6 +31,8 @@ export default function DocumentDetail() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isGeneratingAccidentCard, setIsGeneratingAccidentCard] = useState(false);
+  const [accidentCardError, setAccidentCardError] = useState<string | null>(null);
 
   useEffect(() => {
     if (documentFromStore || isLoading || Number.isNaN(documentId)) {
@@ -124,15 +126,26 @@ export default function DocumentDetail() {
     ];
   }, [documentData]);
 
-  const handleDownload = async () => {
+  useEffect(() => {
+    setAccidentCardError(null);
+    setIsGeneratingAccidentCard(false);
+  }, [documentData?.id]);
+
+  const handleGenerateAccidentCard = async () => {
     if (documentData?.id == null) {
       return;
     }
 
+    setAccidentCardError(null);
+    setIsGeneratingAccidentCard(true);
+
     try {
-      await downloadOriginalDocument(documentData.id);
+      await downloadAccidentCard(documentData.id);
     } catch (err) {
       console.error(err);
+      setAccidentCardError('Nie udało się wygenerować karty wypadku. Spróbuj ponownie.');
+    } finally {
+      setIsGeneratingAccidentCard(false);
     }
   };
 
@@ -214,10 +227,12 @@ export default function DocumentDetail() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       type="button"
-                      onClick={handleDownload}
-                      className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                      onClick={handleGenerateAccidentCard}
+                      disabled={isGeneratingAccidentCard}
+                      aria-busy={isGeneratingAccidentCard}
+                      className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Sprządź kartę wypadku
+                      {isGeneratingAccidentCard ? 'Generowanie...' : 'Stwórz kartę wypadku'}
                     </button>
                     <button
                       type="button"
@@ -227,6 +242,9 @@ export default function DocumentDetail() {
                       Pobierz zanonimizowany
                     </button>
                   </div>
+                  {accidentCardError && (
+                    <p className="text-sm text-(--color-error)">{accidentCardError}</p>
+                  )}
                 </div>
               </section>
 

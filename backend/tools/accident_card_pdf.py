@@ -1,8 +1,9 @@
 from collections.abc import Mapping
 from io import BytesIO
+import textwrap
 from typing import Any, Optional
 
-import fitz
+import fitz  # type: ignore
 
 ACCIDENT_CARD_TEMPLATE = """DANE IDENTYFIKACYJNE PŁATNIKA SKŁADEK
 Imię i nazwisko lub nazwa: {payer_name}
@@ -181,34 +182,53 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
 
     document = fitz.open()
     page = document.new_page()
-    text_rect = fitz.Rect(40, 40, page.rect.width - 40, page.rect.height - 40)
 
-    remaining = page.insert_textbox(
-        text_rect,
-        card_text,
-        fontsize=11,
-        fontname="helv",
-        align=0,
-    )
+    margin = 40
+    font_size = 11
+    line_spacing = font_size * 1.45
+    max_width = page.rect.width - margin * 2
+    cursor_y = margin
 
-    while remaining > 0:
-        rendered_length = len(card_text) - remaining
-        card_text = card_text[rendered_length:]
-        page = document.new_page()
-        text_rect = fitz.Rect(40, 40, page.rect.width - 40, page.rect.height - 40)
-        remaining = page.insert_textbox(
-            text_rect,
-            card_text,
-            fontsize=11,
-            fontname="helv",
-            align=0,
+    def _new_page() -> fitz.Page:
+        return document.new_page()
+
+    def _wrap_line(line: str) -> list[str]:
+        if not line.strip():
+            return [""]
+        initial_indent = ""
+        subsequent_indent = ""
+        working_line = line
+        if line.startswith("- "):
+            initial_indent = "- "
+            subsequent_indent = "  "
+            working_line = line[2:]
+        wrapped = textwrap.wrap(
+            working_line,
+            width=90,
+            initial_indent=initial_indent,
+            subsequent_indent=subsequent_indent,
+            replace_whitespace=False,
+            drop_whitespace=False,
         )
-        if remaining == len(card_text):
-            document.close()
-            raise ValueError("Unable to render accident card PDF content on a new page.")
+        return wrapped if wrapped else [initial_indent.rstrip() if initial_indent else ""]
+
+    for raw_line in card_text.splitlines():
+        for wrapped_line in _wrap_line(raw_line):
+            if cursor_y + line_spacing > page.rect.height - margin:
+                page = _new_page()
+                cursor_y = margin
+
+            page.insert_text(
+                (margin, cursor_y),
+                wrapped_line,
+                fontsize=font_size,
+                fontname="helv",
+                color=(0, 0, 0),
+            )
+            cursor_y += line_spacing
 
     output = BytesIO()
-    document.save(stream=output, clean=True)
+    document.save(output, clean=True, garbage=4)
     document.close()
     output.seek(0)
     return output
