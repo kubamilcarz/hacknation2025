@@ -1,6 +1,6 @@
 # ZANT – ZUS Accident Notification Tool
 
-ZANT is an AI-assisted workflow that helps Polish entrepreneurs zgłosić wypadek przy pracy and equips ZUS staff with decision support tooling. The platform guides citizens through compliant accident submissions, analyses uploaded documentation with OCR and LLMs, and gives caseworkers concise recommendations plus ready-to-send artefacts.
+ZANT is an AI-assisted workflow that helps Polish entrepreneurs report an incident at work and equips ZUS staff with decision support tooling. The platform guides citizens through compliant accident submissions, analyses uploaded documentation with OCR and LLMs, and gives caseworkers concise recommendations plus ready-to-send artefacts.
 
 ---
 
