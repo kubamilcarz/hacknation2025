@@ -81,7 +81,7 @@ class ChatGPTClient:
         """
         return self.simple_chat(prompt)
 
-    def user_recommendation(self, data, field_name: str, history: str):
+    def user_recommendation(self, data, field_name: str):
         prompt = f"""
         Twoją rolą jest weryfikacja i doprecyzowanie odpowiedzi użytkownika w pytaniach otwartych. Chodzi o zgłoszenie wypadku przy pracy osoby prowadzącej pozarolniczą działalność gospodarczą.
 
@@ -160,9 +160,6 @@ class ChatGPTClient:
         
         Użytkownik aktualnie edytuje pole: 
         {field_name}
-        
-        Historia konwersacji:
-        {history}
         
         
         Zwróć informację w postaci json:
