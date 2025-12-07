@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from io import BytesIO
-import textwrap
+from pathlib import Path
 from typing import Any, Optional
 
 import fitz  # type: ignore
@@ -188,6 +188,7 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
     line_spacing = font_size * 1.45
     max_width = page.rect.width - margin * 2
     cursor_y = margin
+    font = _get_render_font()
 
     def _new_page() -> fitz.Page:
         return document.new_page()
@@ -195,22 +196,38 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
     def _wrap_line(line: str) -> list[str]:
         if not line.strip():
             return [""]
-        initial_indent = ""
-        subsequent_indent = ""
+
+        bullet_prefix = ""
+        continuation_prefix = ""
         working_line = line
+
         if line.startswith("- "):
-            initial_indent = "- "
-            subsequent_indent = "  "
+            bullet_prefix = "- "
+            continuation_prefix = "  "
             working_line = line[2:]
-        wrapped = textwrap.wrap(
-            working_line,
-            width=90,
-            initial_indent=initial_indent,
-            subsequent_indent=subsequent_indent,
-            replace_whitespace=False,
-            drop_whitespace=False,
-        )
-        return wrapped if wrapped else [initial_indent.rstrip() if initial_indent else ""]
+
+        words = working_line.split()
+        if not words:
+            return [bullet_prefix.rstrip() if bullet_prefix else ""]
+
+        lines: list[str] = []
+        current = bullet_prefix
+
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            effective_candidate = candidate or word
+            if font.text_length(effective_candidate, fontsize=font_size) <= max_width:
+                current = effective_candidate
+                continue
+
+            if current:
+                lines.append(current)
+            current = f"{continuation_prefix}{word}" if continuation_prefix else word
+
+        if current:
+            lines.append(current)
+
+        return lines if lines else [""]
 
     for raw_line in card_text.splitlines():
         for wrapped_line in _wrap_line(raw_line):
@@ -222,7 +239,7 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
                 (margin, cursor_y),
                 wrapped_line,
                 fontsize=font_size,
-                fontname="helv",
+                font=font,
                 color=(0, 0, 0),
             )
             cursor_y += line_spacing
@@ -232,3 +249,32 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
     document.close()
     output.seek(0)
     return output
+
+
+_FONT_CANDIDATES = (
+    Path(__file__).resolve().parents[2] / "frontend" / "public" / "fonts" / "Inter-Regular.ttf",
+    Path(__file__).resolve().parents[2] / "fonts" / "Inter-Regular.ttf",
+    Path(__file__).resolve().parents[2] / "resources" / "Inter-Regular.ttf",
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/Library/Fonts/Arial Unicode.ttf"),
+    Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+)
+
+_FONT_CACHE: Optional[fitz.Font] = None
+
+
+def _get_render_font() -> fitz.Font:
+    global _FONT_CACHE
+    if _FONT_CACHE is not None:
+        return _FONT_CACHE
+
+    for candidate in _FONT_CANDIDATES:
+        if candidate.is_file():
+            try:
+                _FONT_CACHE = fitz.Font(file=str(candidate))
+                return _FONT_CACHE
+            except Exception:
+                continue
+
+    _FONT_CACHE = fitz.Font("helv")
+    return _FONT_CACHE

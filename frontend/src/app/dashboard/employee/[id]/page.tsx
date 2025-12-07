@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAiFeedback } from '@/context/AiFeedbackContext';
 import { useDocuments } from '@/context/DocumentContext';
@@ -10,6 +10,11 @@ import {
   documentDetailService,
   type DocumentPreviewHandle,
 } from '@/lib/services/documentDetailService';
+import {
+  buildCompanySnapshot,
+  fetchMockPkdProfile,
+  type PkdProfileMock,
+} from '@/lib/services/pkdProfileMockService';
 import { formatFileSize, formatStatus } from '@/lib/services/employeeDocumentService';
 import type { EmployeeDocument, EmployeeDocumentAssessmentEntry } from '@/types/employeeDocument';
 
@@ -28,11 +33,15 @@ export default function DocumentDetail() {
   const [remoteError, setRemoteError] = useState<string | null>(null);
 
   const documentData = documentFromStore ?? remoteDocument;
+  const companySnapshot = useMemo(() => buildCompanySnapshot(documentData), [documentData]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isGeneratingAccidentCard, setIsGeneratingAccidentCard] = useState(false);
   const [accidentCardError, setAccidentCardError] = useState<string | null>(null);
+  const [pkdProfile, setPkdProfile] = useState<PkdProfileMock | null>(null);
+  const [isPkdLoading, setIsPkdLoading] = useState(false);
+  const [pkdError, setPkdError] = useState<string | null>(null);
 
   useEffect(() => {
     if (documentFromStore || isLoading || Number.isNaN(documentId)) {
@@ -112,6 +121,49 @@ export default function DocumentDetail() {
     };
   }, [documentData?.id]);
 
+  useEffect(() => {
+    if (!documentData) {
+      setPkdProfile(null);
+      setPkdError(null);
+      setIsPkdLoading(false);
+      return;
+    }
+
+    if (!companySnapshot.nip) {
+      setPkdProfile(null);
+      setIsPkdLoading(false);
+      setPkdError('Brak numeru NIP w metadanych zgłoszenia.');
+      return;
+    }
+
+    let isCancelled = false;
+    setIsPkdLoading(true);
+    setPkdError(null);
+    setPkdProfile(null);
+
+    fetchMockPkdProfile(companySnapshot.nip)
+      .then((profile) => {
+        if (!isCancelled) {
+          setPkdProfile(profile);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!isCancelled) {
+          setPkdError('Nie udało się pobrać profilu PKD.');
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsPkdLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [companySnapshot.nip, documentData]);
+
   const breadcrumbItems = useMemo(() => {
     if (documentData) {
       return [
@@ -161,7 +213,46 @@ export default function DocumentDetail() {
     }
   };
 
+  const handleRefreshPkdProfile = useCallback(() => {
+    if (!documentData || !companySnapshot.nip) {
+      setPkdError('Brak numeru NIP w metadanych zgłoszenia.');
+      return;
+    }
+
+    setIsPkdLoading(true);
+    setPkdError(null);
+    setPkdProfile(null);
+
+    fetchMockPkdProfile(companySnapshot.nip)
+      .then((profile) => {
+        setPkdProfile(profile);
+      })
+      .catch((error) => {
+        console.error(error);
+        setPkdError('Nie udało się pobrać profilu PKD.');
+      })
+      .finally(() => {
+        setIsPkdLoading(false);
+      });
+  }, [companySnapshot.nip, documentData]);
+
   const metadataCards = useMemo(() => documentDetailService.buildMetadataCards(documentData), [documentData]);
+  const isIndustryMismatch = useMemo(() => {
+    if (!companySnapshot.declaredIndustry || !pkdProfile) {
+      return false;
+    }
+    return companySnapshot.declaredIndustry !== pkdProfile.registeredIndustry;
+  }, [companySnapshot.declaredIndustry, pkdProfile]);
+  const pkdUpdatedAtLabel = useMemo(() => {
+    if (!pkdProfile?.updatedAt) {
+      return null;
+    }
+    const date = new Date(pkdProfile.updatedAt);
+    if (Number.isNaN(date.getTime())) {
+      return pkdProfile.updatedAt;
+    }
+    return date.toLocaleDateString('pl-PL', { dateStyle: 'long' });
+  }, [pkdProfile?.updatedAt]);
 
   return (
     <div className="min-h-screen bg-app py-8">
@@ -277,6 +368,74 @@ export default function DocumentDetail() {
                     <p className="mt-1 text-base font-medium text-primary">{card.value}</p>
                   </div>
                 ))}
+              </section>
+
+              <section className="rounded-xl border border-subtle bg-surface px-6 py-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">NIP i region</p>
+                    <p className="mt-1 text-base font-semibold text-primary">Profil działalności płatnika</p>
+                    <p className="text-sm text-muted">Mockowane dane PKD pomagają szybciej wykryć niezgodność branży.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRefreshPkdProfile}
+                    disabled={isPkdLoading}
+                    className="inline-flex items-center justify-center rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isPkdLoading ? 'Odświeżanie…' : 'Odśwież profil PKD'}
+                  </button>
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">NIP</p>
+                    <p className="mt-1 text-base font-semibold text-primary">{companySnapshot.nip ?? 'Brak danych'}</p>
+                    <p className="text-xs text-muted">Identyfikator płatnika składek</p>
+                  </div>
+                  <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Region działalności</p>
+                    <p className="mt-1 text-base font-semibold text-primary">{companySnapshot.region ?? 'Brak danych'}</p>
+                    <p className="text-xs text-muted">Województwo rejestru REGON</p>
+                  </div>
+                  <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Branża z opisu zgłoszenia</p>
+                    <p className="mt-1 text-base font-semibold text-primary">{companySnapshot.declaredIndustry ?? 'Brak danych'}</p>
+                    <p className="text-xs text-muted">Wykryta z treści dokumentu</p>
+                  </div>
+                </div>
+                <div className="mt-6 rounded-lg border border-dashed border-subtle bg-surface-subdued px-4 py-3">
+                  {isPkdLoading && <p className="text-sm text-muted">Ładowanie profilu PKD…</p>}
+                  {!isPkdLoading && pkdError && <p className="text-sm text-(--color-error)">{pkdError}</p>}
+                  {!isPkdLoading && !pkdError && pkdProfile && (
+                    <div className="md:grid md:grid-cols-2 md:gap-6">
+                      <div className="mb-4 md:mb-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Dominujące PKD</p>
+                        <p className="mt-1 text-base font-semibold text-primary">{pkdProfile.pkdCode}</p>
+                        <p className="text-sm text-secondary">{pkdProfile.pkdName}</p>
+                      </div>
+                      <div className="rounded-lg border border-subtle bg-surface px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Profil firmy</p>
+                        <p className="mt-1 text-base font-medium text-primary">{pkdProfile.registeredIndustry}</p>
+                        <p className="text-xs text-muted">
+                          Ostatnia aktualizacja: {pkdUpdatedAtLabel ?? 'brak danych'} • Wielkość: {pkdProfile.employeesRange} • Wiarygodność: {pkdProfile.reliabilityScore}%
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {!isPkdLoading && !pkdError && !pkdProfile && (
+                    <p className="text-sm text-muted">Profil PKD będzie dostępny po zakończeniu analizy dokumentu.</p>
+                  )}
+                </div>
+                {isIndustryMismatch && pkdProfile && (
+                  <div className="mt-4 flex items-start gap-3 rounded-lg border border-(--color-warning) bg-(--color-warning-softest) px-4 py-3 text-sm text-(--color-warning)">
+                    <span className="text-base font-black leading-none">!</span>
+                    <p>
+                      Zwróć uwagę: opis zdarzenia wskazuje na branżę „{companySnapshot.declaredIndustry}”, natomiast profil PKD
+                      ({pkdProfile.pkdCode}) prowadzi do „{pkdProfile.registeredIndustry}”. Potwierdź, czy działalność objęta zgłoszeniem
+                      faktycznie pokrywa się z rejestrem płatnika.
+                    </p>
+                  </div>
+                )}
               </section>
 
               <section className="rounded-xl border border-dashed border-subtle bg-surface-subdued px-6 py-5">
