@@ -247,7 +247,7 @@ class ChatGPTClient:
         #### Wymagany Format JSON
 
         ```json
-        {
+        {{
         "ocena_przeslanek": {
             "naglosc": {"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."},
             "przyczyna_zewnetrzna": {"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."},
@@ -270,7 +270,7 @@ class ChatGPTClient:
         "pytania_poglebiajace": [
             "Zadaj 1 do 3 konkretnych pytań. Pytania te muszą odnosić się do treści użytkownika i dążyć do uzupełnienia braków lub doprecyzowania elementu."
         ]
-        }
+        }}
         ```
         
         Dane znajdujące się w formularzu:
