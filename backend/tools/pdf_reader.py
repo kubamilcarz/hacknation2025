@@ -40,3 +40,8 @@ class PDFReader:
     def read_input_fields(pdf: UploadedFile) -> dict:
         """Read form fields from PDF template"""
         return PdfReader(pdf).get_form_text_fields()
+
+    @staticmethod
+    def read_text_from_page(pdf: UploadedFile, page: int = 3) -> str:
+        reader = PdfReader(pdf)
+        return reader.pages[page].extract_text()

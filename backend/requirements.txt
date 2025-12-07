@@ -5,3 +5,7 @@ filters
 markdown
 openai
 PyPDF2
+Pillow
+pytesseract
+PyMuPDF
+python-dotenv
