@@ -393,7 +393,7 @@ def user_recommendation_view(request):
     data = request_data.get("data")
     field_name = request_data.get("field_name")
 
-    return JsonResponse(chat_client.user_recommendation(data, field_name, history), safe=False)
+    return JsonResponse(chat_client.user_recommendation(data, field_name), safe=False)
 
 
 @csrf_exempt
