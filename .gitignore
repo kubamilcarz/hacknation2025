@@ -3,5 +3,4 @@
 **/venv/
 **.env
 **.env.local
-**/.venv
-
+**/.venv/
