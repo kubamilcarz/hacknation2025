@@ -30,6 +30,7 @@ interface DocumentContextValue {
   loadDocuments: (options?: DocumentListOptions) => Promise<DocumentListResponse | null>;
   refresh: () => Promise<void>;
   createDocument: (payload: CreateDocumentInput) => Promise<Document>;
+  downloadDocumentFile: (id: number, format: "docx" | "pdf") => Promise<void>;
   getDocumentById: (id: number) => Document | undefined;
 }
 
@@ -112,6 +113,10 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     }
   }, [loadDocuments]);
 
+  const downloadDocumentFile = useCallback(async (id: number, format: "docx" | "pdf") => {
+    await documentService.downloadAttachment(id, format);
+  }, []);
+
   const getDocumentById = useCallback(
     (id: number) => documents.find((document) => document.id === id),
     [documents]
@@ -132,6 +137,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         await loadDocuments();
       },
       createDocument,
+      downloadDocumentFile,
       getDocumentById,
     }),
     [
@@ -145,6 +151,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       error,
       loadDocuments,
       createDocument,
+      downloadDocumentFile,
       getDocumentById,
     ]
   );

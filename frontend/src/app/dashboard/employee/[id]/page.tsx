@@ -67,7 +67,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
     if (documentData) {
       return [
         { href: '/dashboard/employee', labelKey: 'panel' },
-        { label: `Dokument #${documentData.id ?? '—'}` },
+        { label: `Dokument #${documentData.id ?? 'Brak danych'}` },
       ];
     }
 
@@ -116,7 +116,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
             <Breadcrumbs items={breadcrumbItems} />
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold text-primary">
-                {documentData ? `Dokument #${documentData.id ?? '—'}` : 'Dokument'}
+                {documentData ? `Dokument #${documentData.id ?? 'Brak danych'}` : 'Dokument'}
               </h1>
               <button
                 type="button"
@@ -190,7 +190,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted">Planowany czas pracy</p>
                     <p className="mt-1 text-base font-medium text-primary">
-                      {documentData.planowana_godzina_rozpoczecia_pracy ?? '—'} – {documentData.planowana_godzina_zakonczenia_pracy ?? '—'}
+                      {documentData.planowana_godzina_rozpoczecia_pracy ?? 'Brak danych'} - {documentData.planowana_godzina_zakonczenia_pracy ?? 'Brak danych'}
                     </p>
                   </div>
                   <div>

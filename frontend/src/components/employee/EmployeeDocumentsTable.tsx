@@ -25,14 +25,20 @@ type ColumnDefinition = {
 
 export type SortConfig = { columnId: DocumentListOptions["sort"]; direction: "asc" | "desc" } | null;
 
-const SORTABLE_COLUMNS: Array<{ id: DocumentListOptions["sort"]; defaultDirection: "asc" | "desc" }> = [
-  { id: "data_wypadku", defaultDirection: "desc" },
-  { id: "id", defaultDirection: "asc" },
-  { id: "imie", defaultDirection: "asc" },
-  { id: "nazwisko", defaultDirection: "asc" },
-  { id: "pesel", defaultDirection: "asc" },
-  { id: "miejsce_wypadku", defaultDirection: "asc" },
+export const EMPLOYEE_SORTABLE_COLUMNS: Array<{
+  id: DocumentListOptions["sort"];
+  label: string;
+  defaultDirection: "asc" | "desc";
+}> = [
+  { id: "data_wypadku", label: "Data wypadku", defaultDirection: "desc" },
+  { id: "id", label: "ID", defaultDirection: "asc" },
+  { id: "imie", label: "Imię", defaultDirection: "asc" },
+  { id: "nazwisko", label: "Nazwisko", defaultDirection: "asc" },
+  { id: "pesel", label: "PESEL", defaultDirection: "asc" },
+  { id: "miejsce_wypadku", label: "Miejsce wypadku", defaultDirection: "asc" },
 ];
+
+const SORTABLE_COLUMNS = EMPLOYEE_SORTABLE_COLUMNS.map(({ id, defaultDirection }) => ({ id, defaultDirection }));
 
 const SORTABLE_COLUMN_MAP = SORTABLE_COLUMNS.reduce<Record<string, { defaultDirection: "asc" | "desc" }>>(
   (accumulator, column) => {
@@ -145,7 +151,7 @@ export default function EmployeeDocumentsTable({
         label: "ID",
         minWidth: 100,
         cellClassName: "font-semibold text-secondary",
-        render: (documentRow) => <span className="block truncate">{documentRow.id ?? "—"}</span>,
+        render: (documentRow) => <span className="block truncate">{documentRow.id ?? "Brak danych"}</span>,
         sortable: true,
         defaultSortDirection: "asc",
         sticky: "left",

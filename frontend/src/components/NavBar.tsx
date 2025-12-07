@@ -27,7 +27,7 @@ export default function NavBar({ variant }: NavBarProps = {}) {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-subtle bg-surface/95 backdrop-blur supports-backdrop-filter:bg-surface/75">
+    <header className="sticky top-0 z-40 w-full border-b border-subtle bg-surface">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-6 px-6 md:px-8">
         <Link
           href="/"
@@ -44,7 +44,7 @@ export default function NavBar({ variant }: NavBarProps = {}) {
             />
           </div>
           <span className="hidden text-sm font-semibold text-muted md:inline">
-            AccidentFlow | {isEmployee ? "Panel Weryfikacji" : "Generator Zgłoszeń"}
+            AccidentFlow | {isEmployee ? "Panel Weryfikacji" : "Generator Zawiadomień"}
           </span>
         </Link>
  

@@ -10,7 +10,7 @@ import {
 } from '@/lib/services/documentService';
 import Footer from '@/components/Footer';
 import DashboardHeader from '@/components/employee/DashboardHeader';
-import DocumentFiltersPanel from '@/components/employee/DocumentFiltersPanel';
+import DocumentFiltersPanel, { type BooleanFilterValue } from '@/components/employee/DocumentFiltersPanel';
 import EmployeeDocumentsTable, {
   type SortConfig,
   getEmployeeColumnDefaultDirection,
@@ -23,6 +23,45 @@ const isSortDirectionValue = (value: string | null): value is 'asc' | 'desc' =>
   value === 'asc' || value === 'desc';
 
 const PAGE_SIZE = 10;
+
+const HELP_PROVIDED_PARAM = 'help';
+const MACHINE_INVOLVED_PARAM = 'machine';
+
+const parseFilterParamToState = (value: string | null): BooleanFilterValue => {
+  if (value === 'yes') {
+    return 'yes';
+  }
+
+  if (value === 'no') {
+    return 'no';
+  }
+
+  return 'all';
+};
+
+const filterStateToParam = (value: BooleanFilterValue): string | null => {
+  if (value === 'yes') {
+    return 'yes';
+  }
+
+  if (value === 'no') {
+    return 'no';
+  }
+
+  return null;
+};
+
+const filterParamToBoolean = (value: string | null): boolean | null => {
+  if (value === 'yes') {
+    return true;
+  }
+
+  if (value === 'no') {
+    return false;
+  }
+
+  return null;
+};
 
 export default function EmployeeDashboard() {
   const router = useRouter();
@@ -52,6 +91,12 @@ export default function EmployeeDashboard() {
   const hasDocumentsToExport = totalCount > 0;
   const initialSearchTerm = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+  const [helpProvidedFilter, setHelpProvidedFilter] = useState<BooleanFilterValue>(
+    parseFilterParamToState(searchParams.get(HELP_PROVIDED_PARAM))
+  );
+  const [machineInvolvedFilter, setMachineInvolvedFilter] = useState<BooleanFilterValue>(
+    parseFilterParamToState(searchParams.get(MACHINE_INVOLVED_PARAM))
+  );
   const searchCommittedValueRef = useRef<string | null>(
     initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
   );
@@ -98,6 +143,7 @@ export default function EmployeeDashboard() {
   });
 
   const currentQueryOptionsRef = useRef<DocumentListOptions>({ page: 1, pageSize: PAGE_SIZE });
+  const pendingPageRef = useRef<number | null>(null);
 
   const searchParamsString = searchParams.toString();
   const commitQueryParams = useCallback(
@@ -150,6 +196,8 @@ export default function EmployeeDashboard() {
 
     const sortParam = params.get('sort');
     const directionParam = params.get('direction');
+    const helpParam = params.get(HELP_PROVIDED_PARAM);
+    const machineParam = params.get(MACHINE_INVOLVED_PARAM);
     const defaultSort = getEmployeeDefaultSortConfig();
     const hasValidSortParam = sortParam ? isEmployeeSortableColumn(sortParam) : false;
 
@@ -163,6 +211,8 @@ export default function EmployeeDashboard() {
         ? directionParam
         : getEmployeeColumnDefaultDirection(sortParam as DocumentListOptions['sort']))
       : defaultSort?.direction ?? 'desc';
+    const resolvedHelpProvided = filterParamToBoolean(helpParam);
+    const resolvedMachineInvolved = filterParamToBoolean(machineParam);
 
     const nextOptions: DocumentListOptions = {
       page: normalizedRequestedPage,
@@ -170,11 +220,20 @@ export default function EmployeeDashboard() {
       search: searchOption,
       sort: resolvedSort,
       direction: resolvedDirection,
+      helpProvided: resolvedHelpProvided,
+      machineInvolved: resolvedMachineInvolved,
     };
 
+    pendingPageRef.current = nextOptions.page ?? 1;
     currentQueryOptionsRef.current = nextOptions;
     void loadDocuments(nextOptions);
   }, [currentPageSize, loadDocuments, normalizedRequestedPage, searchParamsString]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      pendingPageRef.current = null;
+    }
+  }, [isLoading]);
 
   const commitSearchTerm = useCallback(
     (value?: string) => {
@@ -196,19 +255,45 @@ export default function EmployeeDashboard() {
   );
 
   useEffect(() => {
-    if (!hasLoaded || isLoading) {
+    if (!hasLoaded) {
       return;
     }
 
-    const desiredValue = currentServicePage <= 1 ? null : String(currentServicePage);
+    const pendingPage = pendingPageRef.current;
+    if (pendingPage != null && pendingPage !== currentServicePage) {
+      return;
+    }
+
+    if (pendingPage != null && pendingPage === currentServicePage) {
+      pendingPageRef.current = null;
+    }
+
+    const hasMultiplePages = totalPages > 1;
+    const desiredValue = currentServicePage > 1 ? String(currentServicePage) : null;
     const currentValue = rawPageParam ?? null;
 
     if (desiredValue === currentValue) {
       return;
     }
 
+    if (desiredValue === null) {
+      if (!hasMultiplePages) {
+        if (currentValue !== null) {
+          commitQueryParams({ page: null });
+        }
+        return;
+      }
+
+      if (currentValue === null || currentValue === '1') {
+        return;
+      }
+
+      commitQueryParams({ page: '1' });
+      return;
+    }
+
     commitQueryParams({ page: desiredValue });
-  }, [commitQueryParams, currentServicePage, hasLoaded, isLoading, rawPageParam]);
+  }, [commitQueryParams, currentServicePage, hasLoaded, rawPageParam, totalPages]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -248,11 +333,35 @@ export default function EmployeeDashboard() {
     [commitSearchTerm]
   );
 
+  const handleHelpProvidedChange = useCallback(
+    (value: BooleanFilterValue) => {
+      setHelpProvidedFilter(value);
+      commitQueryParams({
+        [HELP_PROVIDED_PARAM]: filterStateToParam(value),
+        page: null,
+      });
+    },
+    [commitQueryParams]
+  );
+
+  const handleMachineInvolvedChange = useCallback(
+    (value: BooleanFilterValue) => {
+      setMachineInvolvedFilter(value);
+      commitQueryParams({
+        [MACHINE_INVOLVED_PARAM]: filterStateToParam(value),
+        page: null,
+      });
+    },
+    [commitQueryParams]
+  );
+
   useEffect(() => {
     const currentParams = new URLSearchParams(searchParamsString);
     const rawSearchParam = currentParams.get('search');
     const normalizedSearchParam = rawSearchParam?.trim() ?? '';
     const canonicalValue = normalizedSearchParam.length > 0 ? normalizedSearchParam : null;
+    const nextHelpFilter = parseFilterParamToState(currentParams.get(HELP_PROVIDED_PARAM));
+    const nextMachineFilter = parseFilterParamToState(currentParams.get(MACHINE_INVOLVED_PARAM));
 
     if (rawSearchParam && rawSearchParam !== normalizedSearchParam) {
       searchCommittedValueRef.current = canonicalValue;
@@ -271,6 +380,8 @@ export default function EmployeeDashboard() {
         }
         return normalizedSearchParam;
       });
+      setHelpProvidedFilter((currentValue) => (currentValue === nextHelpFilter ? currentValue : nextHelpFilter));
+      setMachineInvolvedFilter((currentValue) => (currentValue === nextMachineFilter ? currentValue : nextMachineFilter));
     });
   }, [commitQueryParams, searchParamsString]);
 
@@ -347,7 +458,7 @@ export default function EmployeeDashboard() {
 
       const rows = dataset
         .map((documentRow) => [
-          documentRow.id ?? '—',
+          documentRow.id ?? 'Brak danych',
           documentRow.imie,
           documentRow.nazwisko,
           documentRow.pesel,
@@ -423,6 +534,10 @@ export default function EmployeeDashboard() {
               onSearchChange={handleSearchInputChange}
               onSearchBlur={handleSearchInputBlur}
               onSearchKeyDown={handleSearchInputKeyDown}
+              helpProvidedValue={helpProvidedFilter}
+              onHelpProvidedChange={handleHelpProvidedChange}
+              machineInvolvedValue={machineInvolvedFilter}
+              onMachineInvolvedChange={handleMachineInvolvedChange}
             />
 
             <EmployeeDocumentsTable
