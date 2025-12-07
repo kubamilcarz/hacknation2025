@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useAiFeedback } from '@/context/AiFeedbackContext';
 import { useDocuments } from '@/context/DocumentContext';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import {
@@ -10,7 +11,7 @@ import {
   type DocumentPreviewHandle,
 } from '@/lib/services/documentDetailService';
 import { formatFileSize, formatStatus } from '@/lib/services/employeeDocumentService';
-import type { EmployeeDocument } from '@/types/employeeDocument';
+import type { EmployeeDocument, EmployeeDocumentAssessmentEntry } from '@/types/employeeDocument';
 
 export default function DocumentDetail() {
   const router = useRouter();
@@ -149,32 +150,6 @@ export default function DocumentDetail() {
 
   const metadataCards = useMemo(() => documentDetailService.buildMetadataCards(documentData), [documentData]);
 
-  const renderAssessmentAction = (status: EmployeeDocument['assessment']['suddenness']['status'], recommendation?: string) => {
-    if (status === 'met') {
-      return (
-        <button
-          type="button"
-          onClick={handleDownloadAnonymized}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-3 py-1.5 text-xs font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-        >
-          Pobierz zanonimizowany PDF
-        </button>
-      );
-    }
-
-    const label =
-      status === 'partial'
-        ? 'Proponowana wiadomość (przesłanka niepełna)'
-        : 'Proponowana wiadomość (przesłanka niespełniona)';
-
-    return (
-      <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-secondary">
-        <p className="font-semibold text-primary">{label}</p>
-        <p className="mt-1 leading-relaxed">{recommendation ?? 'Poproś o uzupełnienie brakujących informacji.'}</p>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-app py-8">
       <div className="mx-auto w-full max-w-6xl px-6">
@@ -242,7 +217,7 @@ export default function DocumentDetail() {
                       onClick={handleDownload}
                       className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                     >
-                      Pobierz oryginał
+                      Sprządź kartę wypadku
                     </button>
                     <button
                       type="button"
@@ -265,26 +240,13 @@ export default function DocumentDetail() {
                     }
 
                     return (
-                      <div
+                      <AssessmentCard
                         key={section.key}
-                        className={`flex h-full flex-col justify-between rounded-2xl border p-3 shadow-sm ${documentDetailService.getAssessmentCardOutline(entry.status)}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 space-y-2">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{section.label}</p>
-                            <p className="text-xs leading-snug text-secondary">{section.helper}</p>
-                          </div>
-                          <span
-                            className={`rounded-full border px-3 py-1 text-xs font-semibold shadow-sm ${documentDetailService.getAssessmentStatusClasses(entry.status)}`}
-                          >
-                            {documentDetailService.getAssessmentStatusLabel(entry.status)}
-                          </span>
-                        </div>
-                        <p className="mt-3 flex-1 text-sm leading-relaxed text-primary">{entry.summary}</p>
-                        <div className="mt-4">
-                          {renderAssessmentAction(entry.status, entry.recommendation)}
-                        </div>
-                      </div>
+                        section={section}
+                        entry={entry}
+                        documentData={documentData}
+                        onDownloadAnonymized={handleDownloadAnonymized}
+                      />
                     );
                   })}
                 </div>
@@ -310,7 +272,7 @@ export default function DocumentDetail() {
                     <object
                       data={previewUrl}
                       type="application/pdf"
-                      className="h-[32rem] w-full rounded-lg border border-subtle bg-surface"
+                      className="h-128 w-full rounded-lg border border-subtle bg-surface"
                     >
                       <p className="p-4 text-sm text-muted">
                         Ten przeglądarka nie obsługuje podglądu PDF. Pobierz dokument, aby go otworzyć.
@@ -329,6 +291,139 @@ export default function DocumentDetail() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+type AssessmentCardProps = {
+  section: (typeof DOCUMENT_DETAIL_ASSESSMENT_SECTIONS)[number];
+  entry: EmployeeDocumentAssessmentEntry;
+  documentData: EmployeeDocument;
+  onDownloadAnonymized: () => void;
+};
+
+function AssessmentCard({ section, entry, documentData, onDownloadAnonymized }: AssessmentCardProps) {
+  const cardOutline = documentDetailService.getAssessmentCardOutline(entry.status);
+  const statusClasses = documentDetailService.getAssessmentStatusClasses(entry.status);
+  const statusLabel = documentDetailService.getAssessmentStatusLabel(entry.status);
+  const actionContent = (() => {
+    if (entry.status === 'met') {
+      return (
+        <button
+          type="button"
+          onClick={onDownloadAnonymized}
+          className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-3 py-1.5 text-xs font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+        >
+          Pobierz zanonimizowany PDF
+        </button>
+      );
+    }
+
+    if (entry.status === 'partial') {
+      return <AssessmentRecommendation section={section} entry={entry} documentData={documentData} />;
+    }
+
+    return null;
+  })();
+
+  return (
+    <div className={`flex h-full flex-col justify-between rounded-2xl border p-3 shadow-sm ${cardOutline}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{section.label}</p>
+          <p className="text-xs leading-snug text-secondary">{section.helper}</p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold shadow-sm ${statusClasses}`}>{statusLabel}</span>
+      </div>
+      <p className="mt-3 flex-1 text-sm leading-relaxed text-primary">{entry.summary}</p>
+      {actionContent && <div className="mt-4">{actionContent}</div>}
+    </div>
+  );
+}
+
+type AssessmentRecommendationProps = {
+  section: (typeof DOCUMENT_DETAIL_ASSESSMENT_SECTIONS)[number];
+  entry: EmployeeDocumentAssessmentEntry;
+  documentData: EmployeeDocument;
+};
+
+function AssessmentRecommendation({ section, entry, documentData }: AssessmentRecommendationProps) {
+  const fallbackText = entry.recommendation?.trim() || 'Poproś o uzupełnienie brakujących informacji.';
+
+  const aiInput = useMemo(() => {
+    const details: string[] = [];
+    details.push('Cel: Przygotuj krótką, uprzejmą odpowiedź w imieniu pracownika ZUS kierowaną do osoby zgłaszającej wypadek.');
+    details.push('Forma: język polski, ton profesjonalny i wspierający, podkreślający dalsze kroki oraz potrzebne informacje.');
+    details.push('Uwzględnij: 1) krótkie potwierdzenie otrzymania dokumentu, 2) wnioski z oceny przesłanki, 3) wyjaśnienie co jeszcze jest potrzebne, 4) uprzejme zakończenie z propozycją kontaktu.');
+    details.push(`Sekcja: ${section.label}`);
+    details.push(`Status oceny: ${documentDetailService.getAssessmentStatusLabel(entry.status)}`);
+    if (entry.summary) {
+      details.push(`Podsumowanie oceny: ${entry.summary}`);
+    }
+    if (documentData.incidentDescription) {
+      details.push(`Opis zdarzenia z systemu: ${documentData.incidentDescription}`);
+    }
+    if (entry.recommendation) {
+      details.push(`Poprzednia sugestia dla pracownika: ${entry.recommendation}`);
+    }
+    details.push('Zwróć się bezpośrednio do zgłaszającego w liczbie pojedynczej. Jeśli prosisz o informacje, wskaż konkretnie jakie.');
+    return details.join('\n');
+  }, [documentData.incidentDescription, entry.recommendation, entry.status, entry.summary, section.label]);
+
+  const { message, error, status, isDebouncing, isLoading, refresh } = useAiFeedback(
+    `assessment-${section.key}-recommendation`,
+    aiInput,
+    {
+      metadata: {
+        documentId: documentData.id,
+        sectionKey: section.key,
+        sectionLabel: section.label,
+        assessmentStatus: entry.status,
+        assessmentSummary: entry.summary,
+        previousRecommendation: entry.recommendation ?? null,
+        responseAudience: 'claimant',
+        responseRole: 'ZUS employee',
+        document: {
+          id: documentData.id,
+          analysisStatus: documentData.analysisStatus,
+          incidentDescription: documentData.incidentDescription,
+        },
+      },
+      context: {
+        documentData: {
+          id: documentData.id,
+          incidentDescription: documentData.incidentDescription,
+          assessment: documentData.assessment,
+        },
+        history: documentData.incidentDescription,
+      },
+      debounceMs: 0,
+    },
+  );
+
+  const isWaiting = isDebouncing || isLoading;
+  const aiMessage = message?.trim();
+  const displayText = isWaiting
+    ? 'Generujemy wiadomość na podstawie analizy…'
+    : aiMessage || fallbackText;
+
+  return (
+    <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-secondary">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold text-primary">Proponowana wiadomość (przesłanka niepełna)</p>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={isWaiting}
+          className="text-[11px] font-semibold text-(--color-accent) transition hover:text-(--color-accent-strong) disabled:cursor-not-allowed disabled:text-muted"
+        >
+          Odśwież
+        </button>
+      </div>
+      <p className={`mt-1 leading-relaxed ${isWaiting ? 'text-muted' : 'text-secondary'}`}>{displayText}</p>
+      {status === 'error' && error && (
+        <p className="mt-2 text-[11px] text-(--color-error)">Nie udało się pobrać rekomendacji: {error}</p>
+      )}
     </div>
   );
 }

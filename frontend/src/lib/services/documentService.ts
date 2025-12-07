@@ -659,6 +659,42 @@ export async function downloadDocumentSummary(
   downloadBlobWithName(pdfBlob, targetFileName);
 }
 
+export async function downloadAnonymizedDocument(
+  documentId: number,
+  options: DownloadDocumentSummaryOptions = {}
+): Promise<void> {
+  if (!Number.isFinite(documentId) || documentId <= 0) {
+    throw new Error("Nieprawidłowy identyfikator dokumentu.");
+  }
+
+  const endpoint = buildEndpoint(DEFAULT_BACKEND_URL, `${DOCUMENTS_ENDPOINT}${documentId}/anonymized/`);
+  let response: Response;
+
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/pdf",
+      },
+    });
+  } catch (error) {
+    console.error("Nie udało się połączyć z backendem podczas pobierania zanonimizowanego PDF", error);
+    throw new Error("Nie udało się połączyć z serwerem. Spróbuj ponownie.");
+  }
+
+  if (!response.ok) {
+    const details = await safeReadError(response);
+    const message = details
+      ? `Nie udało się pobrać zanonimizowanego pliku. ${details}`
+      : `Nie udało się pobrać zanonimizowanego pliku (kod ${response.status}).`;
+    throw new Error(message);
+  }
+
+  const pdfBlob = await response.blob();
+  const fileName = buildAnonymizedFileName(options.fileName);
+  downloadBlobWithName(pdfBlob, fileName);
+}
+
 
 function downloadBlob(blob: Blob, extension: string) {
   if (typeof document === "undefined") {
@@ -702,6 +738,16 @@ function buildSummaryFileName(explicitName?: string) {
   return `zgloszenie-${today}.${extension}`;
 }
 
+function buildAnonymizedFileName(explicitName?: string) {
+  const extension = "pdf";
+  if (explicitName) {
+    return ensureFileExtension(explicitName, extension);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  return `zgloszenie-${today}-anon.${extension}`;
+}
+
 function ensureFileExtension(fileName: string, extension: string) {
   const normalized = fileName.trim();
   if (normalized.toLowerCase().endsWith(`.${extension}`)) {
@@ -716,4 +762,4 @@ const documentService: DocumentService = new DefaultDocumentService(
   new HttpDocumentApi({ baseUrl: DEFAULT_BACKEND_URL })
 );
 
-export { documentService, downloadDocumentSummary };
+export { documentService, downloadDocumentSummary, downloadAnonymizedDocument };

@@ -13,12 +13,14 @@ export function ReviewStepSection() {
     submittedDocumentId,
     downloadState,
     handleDownload,
+    handleDownloadAnonymized,
     witnessStatements,
     incidentDraft,
   } = useIncidentReport();
 
   const canDownload = submittedDocumentId != null;
   const isDownloadingPdf = downloadState === 'pdf';
+  const isDownloadingAnonymized = downloadState === 'anon-pdf';
   const aiContext = useMemo(() => ({ documentData: incidentDraft }), [incidentDraft]);
   const reviewMetadata = useMemo(() => ({ step: 'review', field: 'summary' as const }), []);
 
@@ -161,17 +163,26 @@ export function ReviewStepSection() {
             <p className="text-sm text-muted">
               Pobierz gotowy plik PDF i zachowaj go jako część dokumentacji sprawy. Dołączysz go podczas przekazywania zgłoszenia do ZUS.
             </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => void handleDownload('pdf')}
-                disabled={!canDownload || isDownloadingPdf}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isDownloadingPdf && <Spinner size={16} />}
-                Pobierz PDF
-              </button>
-            </div>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => void handleDownload('pdf')}
+                  disabled={!canDownload || isDownloadingPdf}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-strong) hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDownloadingPdf && <Spinner size={16} />}
+                  Pobierz PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadAnonymized()}
+                  disabled={!canDownload || isDownloadingAnonymized}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-4 py-2 text-sm font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDownloadingAnonymized && <Spinner size={16} />}
+                  Pobierz zanonimizowany PDF
+                </button>
+              </div>
           </div>
         </div>
       ) : (

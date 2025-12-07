@@ -10,7 +10,7 @@ import {
   witnessFieldKey,
 } from '@/components/user/dashboard/witnesses/utils';
 import { defaultDocumentData } from '@/lib/mock-documents';
-import { documentService, downloadDocumentSummary } from '@/lib/services/documentService';
+import { documentService, downloadDocumentSummary, downloadAnonymizedDocument } from '@/lib/services/documentService';
 import type { CreateDocumentInput } from '@/lib/services/documentService';
 import type { Document } from '@/types/document';
 
@@ -375,7 +375,7 @@ type IncidentReportContextValue = {
   submitError: string | null;
   submittedDocumentId: number | null;
   activeWitnessIndex: number | null;
-  downloadState: 'idle' | 'pdf';
+  downloadState: 'idle' | 'pdf' | 'anon-pdf';
   witnesses: CreateDocumentInput['witnesses'];
   witnessStatements: UploadedAttachment[];
   medicalDocuments: UploadedAttachment[];
@@ -405,6 +405,7 @@ type IncidentReportContextValue = {
   handleLegalNoticeAttachmentUpload: (files: FileList | File[] | null) => void;
   handleLegalNoticeAttachmentRemove: (id: string) => void;
   handleDownload: (format: 'pdf') => Promise<void>;
+  handleDownloadAnonymized: () => Promise<void>;
 };
 
 const IncidentReportContext = createContext<IncidentReportContextValue | undefined>(undefined);
@@ -428,7 +429,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
-  const [downloadState, setDownloadState] = useState<'idle' | 'pdf'>('idle');
+  const [downloadState, setDownloadState] = useState<'idle' | 'pdf' | 'anon-pdf'>('idle');
   const [witnessStatements, setWitnessStatements] = useState<UploadedAttachment[]>([]);
   const [medicalDocuments, setMedicalDocuments] = useState<UploadedAttachment[]>([]);
   const [additionalAttachments, setAdditionalAttachments] = useState<UploadedAttachment[]>([]);
@@ -846,6 +847,23 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     }
   }, [preparedDocument, submittedDocumentId]);
 
+  const handleDownloadAnonymized = useCallback(async () => {
+    if (submittedDocumentId == null) {
+      setSubmitError('Najpierw przygotuj formularz, a potem spróbuj pobrania ponownie.');
+      return;
+    }
+
+    setDownloadState('anon-pdf');
+    try {
+      await downloadAnonymizedDocument(submittedDocumentId);
+    } catch (error) {
+      console.error(error);
+      setSubmitError('Nie udało się pobrać zanonimizowanego pliku. Spróbuj ponownie.');
+    } finally {
+      setDownloadState('idle');
+    }
+  }, [submittedDocumentId]);
+
   const hasNextStep = currentStepIndex < STEPS.length - 1;
   const isLastStep = currentStepIndex === STEPS.length - 1;
   const isSubmitting = submitState === 'submitting';
@@ -943,6 +961,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     handleLegalNoticeAttachmentUpload,
     handleLegalNoticeAttachmentRemove,
     handleDownload,
+    handleDownloadAnonymized,
   };
 
   return (

@@ -281,3 +281,32 @@ class ChatGPTClient:
         """
 
         return self.simple_chat(prompt)
+
+    def suggested_response(self, *, section_label: str, status_label: str, summary: str,
+                            incident_description: Optional[str] = None,
+                            previous_recommendation: Optional[str] = None,
+                            extra_context: Optional[str] = None) -> str:
+        prompt_lines = [
+            "Jesteś pracownikiem Zakładu Ubezpieczeń Społecznych (ZUS).",
+            "Musisz napisać krótką, uprzejmą odpowiedź do osoby, która zgłosiła wypadek przy pracy.",
+            "Jeśli prosisz o dodatkowe informacje, wskaż konkretnie czego potrzebujesz.",
+            "Używaj języka polskiego, tonu profesjonalnego i wspierającego.",
+            "W wiadomości: (1) podziękuj za przesłane informacje, (2) odnieś się do ocenianej przesłanki,",
+            "(3) poproś o brakujące dane lub poinformuj o kolejnym kroku, (4) zakończ uprzejmą formułą z kontaktem.",
+            "Dane kontekstowe:"
+        ]
+
+        prompt_lines.append(f"- Nazwa przesłanki: {section_label or 'brak danych'}")
+        prompt_lines.append(f"- Status oceny: {status_label or 'brak danych'}")
+        prompt_lines.append(f"- Podsumowanie oceny: {summary or 'brak danych'}")
+        if incident_description:
+            prompt_lines.append(f"- Opis zdarzenia: {incident_description}")
+        if previous_recommendation:
+            prompt_lines.append(f"- Poprzednia rekomendacja: {previous_recommendation}")
+        if extra_context:
+            prompt_lines.append(f"- Dodatkowe informacje: {extra_context}")
+
+        prompt_lines.append("Zwróć jedną wiadomość gotową do wysłania, w maksymalnie 5-6 zdaniach.")
+
+        prompt = "\n".join(prompt_lines)
+        return self.simple_chat(prompt)
