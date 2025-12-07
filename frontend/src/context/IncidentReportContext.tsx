@@ -671,9 +671,9 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     uploadedAt: Date.now(),
   }), []);
 
-  const updateMedicalDocumentsValidation = useCallback((items: UploadedAttachment[]) => {
-    const errorMessage = items.length === 0 ? 'Dołącz przynajmniej jeden dokument medyczny.' : null;
-    applyValidationResult('accident.medicalDocuments', errorMessage);
+  const updateMedicalDocumentsValidation = useCallback(() => {
+    // Dokumenty medyczne są opcjonalne – brak plików nie blokuje przejścia dalej.
+    applyValidationResult('accident.medicalDocuments', null);
   }, [applyValidationResult]);
 
   const handleWitnessStatementUpload = useCallback((incoming: FileList | File[] | null) => {
@@ -708,7 +708,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
 
     setMedicalDocuments((prev) => {
       const next = [...prev, ...files.map(createAttachmentFromFile)];
-      updateMedicalDocumentsValidation(next);
+      updateMedicalDocumentsValidation();
       return next;
     });
   }, [createAttachmentFromFile, updateMedicalDocumentsValidation]);
@@ -716,7 +716,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const handleMedicalDocumentRemove = useCallback((id: string) => {
     setMedicalDocuments((prev) => {
       const next = prev.filter((attachment) => attachment.id !== id);
-      updateMedicalDocumentsValidation(next);
+      updateMedicalDocumentsValidation();
       return next;
     });
   }, [updateMedicalDocumentsValidation]);
@@ -756,16 +756,13 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ensureMedicalDocumentsValid = useCallback(() => {
-    updateMedicalDocumentsValidation(medicalDocuments);
-    return medicalDocuments.length > 0;
-  }, [medicalDocuments, updateMedicalDocumentsValidation]);
+    updateMedicalDocumentsValidation();
+    return true;
+  }, [updateMedicalDocumentsValidation]);
 
   const handleValidationGate = useCallback(() => {
     if (currentStep.id === 'accident') {
-      const attachmentsReady = ensureMedicalDocumentsValid();
-      if (!attachmentsReady) {
-        return false;
-      }
+      ensureMedicalDocumentsValid();
     }
 
     if (letUserProceedWithEmptyFields) {
@@ -897,10 +894,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     }
 
     if (targetIndex > currentStepIndex && currentStep.id === 'accident') {
-      const attachmentsReady = ensureMedicalDocumentsValid();
-      if (!attachmentsReady) {
-        return;
-      }
+      ensureMedicalDocumentsValid();
     }
 
     if (!letUserProceedWithEmptyFields && targetIndex > currentStepIndex) {
@@ -914,11 +908,9 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     setFurthestStepIndex((previousHighest) => Math.max(previousHighest, targetIndex));
   }, [currentStep.id, currentStepIndex, ensureMedicalDocumentsValid, furthestStepIndex, validateStepFields]);
 
-  const hasRequiredAttachments = currentStep.id !== 'accident' || medicalDocuments.length > 0;
-
   const canAdvance = isLastStep
     ? !isSubmitting && !hasSubmittedSuccessfully
-    : hasNextStep && hasRequiredAttachments && (letUserProceedWithEmptyFields || isStepValid(currentStep.id));
+    : hasNextStep && (letUserProceedWithEmptyFields || isStepValid(currentStep.id));
 
   const value: IncidentReportContextValue = {
     steps: STEPS,

@@ -16,6 +16,11 @@ export interface PkdProfileMock {
   reliabilityScore: number;
 }
 
+export interface FetchPkdProfileOptions {
+  preferredIndustry?: string | null;
+  preferMismatch?: boolean;
+}
+
 const REGIONS = [
   "Dolnośląskie",
   "Kujawsko-pomorskie",
@@ -92,9 +97,10 @@ export function buildCompanySnapshot(document: EmployeeDocument | null | undefin
   };
 }
 
-export function fetchMockPkdProfile(nip: string): Promise<PkdProfileMock> {
+export function fetchMockPkdProfile(nip: string, options?: FetchPkdProfileOptions): Promise<PkdProfileMock> {
   const hash = hashString(nip);
-  const profile = PKD_LIBRARY[Math.abs(hash) % PKD_LIBRARY.length];
+  const library = pickLibraryForVariant(options?.preferredIndustry, options?.preferMismatch);
+  const profile = library[Math.abs(hash) % library.length];
   const employeesRange = EMPLOYEE_RANGES[Math.abs(hash) % EMPLOYEE_RANGES.length];
   const daysOffset = Math.abs(hash) % 25;
   const updatedAt = new Date(Date.now() - daysOffset * 24 * 60 * 60 * 1000).toISOString();
@@ -142,4 +148,20 @@ function hashString(value: string): number {
 function buildNipFromHash(hash: number): string {
   const normalized = 1000000000 + (Math.abs(hash) % 899999999);
   return normalized.toString().padStart(10, "0");
+}
+
+function pickLibraryForVariant(preferredIndustry: string | null | undefined, preferMismatch?: boolean) {
+  if (!preferredIndustry) {
+    return PKD_LIBRARY;
+  }
+
+  const normalized = preferredIndustry.trim().toLowerCase();
+  const matches = PKD_LIBRARY.filter((entry) => entry.industry.trim().toLowerCase() === normalized);
+  const mismatches = PKD_LIBRARY.filter((entry) => entry.industry.trim().toLowerCase() !== normalized);
+
+  if (preferMismatch) {
+    return mismatches.length > 0 ? mismatches : PKD_LIBRARY;
+  }
+
+  return matches.length > 0 ? matches : PKD_LIBRARY;
 }

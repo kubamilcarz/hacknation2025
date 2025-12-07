@@ -486,7 +486,6 @@ export function AccidentStepSection() {
             <div className="space-y-1">
               <div className="flex items-baseline justify-between">
                 <p className="text-sm font-semibold text-primary">Dokumentacja medyczna</p>
-                <span className="text-xs font-semibold text-(--color-error)">Wymagane</span>
               </div>
               <p className="text-xs text-muted">
                 Dołącz wypisy ze szpitala, wyniki badań lub zaświadczenia lekarskie potwierdzające uraz.

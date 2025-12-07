@@ -121,6 +121,41 @@ export default function DocumentDetail() {
     };
   }, [documentData?.id]);
 
+  const runPkdFetch = useCallback(
+    (preferMismatch: boolean, abortRef?: { cancelled: boolean }) => {
+      if (!companySnapshot.nip) {
+        return;
+      }
+
+      setIsPkdLoading(true);
+      setPkdError(null);
+      setPkdProfile(null);
+
+      fetchMockPkdProfile(companySnapshot.nip, {
+        preferredIndustry: companySnapshot.declaredIndustry,
+        preferMismatch,
+      })
+        .then((profile) => {
+          if (abortRef?.cancelled) {
+            return;
+          }
+          setPkdProfile(profile);
+        })
+        .catch((error) => {
+          console.error(error);
+          if (!abortRef?.cancelled) {
+            setPkdError('Nie udało się pobrać profilu PKD.');
+          }
+        })
+        .finally(() => {
+          if (!abortRef?.cancelled) {
+            setIsPkdLoading(false);
+          }
+        });
+    },
+    [companySnapshot.declaredIndustry, companySnapshot.nip],
+  );
+
   useEffect(() => {
     if (!documentData) {
       setPkdProfile(null);
@@ -136,33 +171,14 @@ export default function DocumentDetail() {
       return;
     }
 
-    let isCancelled = false;
-    setIsPkdLoading(true);
-    setPkdError(null);
-    setPkdProfile(null);
-
-    fetchMockPkdProfile(companySnapshot.nip)
-      .then((profile) => {
-        if (!isCancelled) {
-          setPkdProfile(profile);
-        }
-      })
-      .catch((error) => {
-        console.error(error);
-        if (!isCancelled) {
-          setPkdError('Nie udało się pobrać profilu PKD.');
-        }
-      })
-      .finally(() => {
-        if (!isCancelled) {
-          setIsPkdLoading(false);
-        }
-      });
+    const abortRef = { cancelled: false };
+    const preferMismatch = Math.random() < 0.5;
+    runPkdFetch(preferMismatch, abortRef);
 
     return () => {
-      isCancelled = true;
+      abortRef.cancelled = true;
     };
-  }, [companySnapshot.nip, documentData]);
+  }, [companySnapshot.declaredIndustry, companySnapshot.nip, documentData, runPkdFetch]);
 
   const breadcrumbItems = useMemo(() => {
     if (documentData) {
@@ -214,27 +230,23 @@ export default function DocumentDetail() {
   };
 
   const handleRefreshPkdProfile = useCallback(() => {
-    if (!documentData || !companySnapshot.nip) {
+    if (!documentData) {
+      setPkdProfile(null);
+      setPkdError('Brak danych dokumentu do sprawdzenia profilu PKD.');
+      setIsPkdLoading(false);
+      return;
+    }
+
+    if (!companySnapshot.nip) {
+      setPkdProfile(null);
+      setIsPkdLoading(false);
       setPkdError('Brak numeru NIP w metadanych zgłoszenia.');
       return;
     }
 
-    setIsPkdLoading(true);
-    setPkdError(null);
-    setPkdProfile(null);
-
-    fetchMockPkdProfile(companySnapshot.nip)
-      .then((profile) => {
-        setPkdProfile(profile);
-      })
-      .catch((error) => {
-        console.error(error);
-        setPkdError('Nie udało się pobrać profilu PKD.');
-      })
-      .finally(() => {
-        setIsPkdLoading(false);
-      });
-  }, [companySnapshot.nip, documentData]);
+    const preferMismatch = Math.random() < 0.5;
+    runPkdFetch(preferMismatch);
+  }, [companySnapshot.nip, documentData, runPkdFetch]);
 
   const metadataCards = useMemo(() => documentDetailService.buildMetadataCards(documentData), [documentData]);
   const isIndustryMismatch = useMemo(() => {
@@ -375,7 +387,7 @@ export default function DocumentDetail() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">NIP i region</p>
                     <p className="mt-1 text-base font-semibold text-primary">Profil działalności płatnika</p>
-                    <p className="text-sm text-muted">Mockowane dane PKD pomagają szybciej wykryć niezgodność branży.</p>
+                    <p className="text-sm text-muted">Zewnętrzna weryfikacja PKD pomaga szybciej wykryć możliwe niezgodności branżowe.</p>
                   </div>
                   <button
                     type="button"
@@ -430,9 +442,8 @@ export default function DocumentDetail() {
                   <div className="mt-4 flex items-start gap-3 rounded-lg border border-(--color-warning) bg-(--color-warning-softest) px-4 py-3 text-sm text-(--color-warning)">
                     <span className="text-base font-black leading-none">!</span>
                     <p>
-                      Zwróć uwagę: opis zdarzenia wskazuje na branżę „{companySnapshot.declaredIndustry}”, natomiast profil PKD
-                      ({pkdProfile.pkdCode}) prowadzi do „{pkdProfile.registeredIndustry}”. Potwierdź, czy działalność objęta zgłoszeniem
-                      faktycznie pokrywa się z rejestrem płatnika.
+                      Wykryto potencjalną niezgodność między opisem zdarzenia a profilem działalności w rejestrze. 
+                      Zalecamy weryfikację, czy okoliczności wypadku odpowiadają rzeczywistemu zakresowi działalności płatnika.
                     </p>
                   </div>
                 )}

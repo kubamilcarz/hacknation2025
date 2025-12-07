@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 import fitz  # type: ignore
 
@@ -188,7 +188,7 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
     line_spacing = font_size * 1.45
     max_width = page.rect.width - margin * 2
     cursor_y = margin
-    font = _get_render_font()
+    font_config = _register_render_font(document)
 
     def _new_page() -> fitz.Page:
         return document.new_page()
@@ -216,7 +216,7 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
         for word in words:
             candidate = f"{current} {word}".strip()
             effective_candidate = candidate or word
-            if font.text_length(effective_candidate, fontsize=font_size) <= max_width:
+            if font_config.metrics.text_length(effective_candidate, fontsize=font_size) <= max_width:
                 current = effective_candidate
                 continue
 
@@ -239,7 +239,7 @@ def render_accident_card_pdf(data: Optional[Mapping[str, Any]]) -> BytesIO:
                 (margin, cursor_y),
                 wrapped_line,
                 fontsize=font_size,
-                font=font,
+                fontname=font_config.fontname,
                 color=(0, 0, 0),
             )
             cursor_y += line_spacing
@@ -260,21 +260,41 @@ _FONT_CANDIDATES = (
     Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
 )
 
-_FONT_CACHE: Optional[fitz.Font] = None
+class RenderFont(NamedTuple):
+    metrics: fitz.Font
+    fontname: str
+    filepath: Optional[str]
 
 
-def _get_render_font() -> fitz.Font:
+_FONT_CACHE: Optional[RenderFont] = None
+
+
+def _register_render_font(document: fitz.Document) -> RenderFont:
     global _FONT_CACHE
     if _FONT_CACHE is not None:
+        if _FONT_CACHE.filepath:
+            try:
+                document.insert_font(fontname=_FONT_CACHE.fontname, fontfile=_FONT_CACHE.filepath)
+            except RuntimeError:
+                pass
         return _FONT_CACHE
 
     for candidate in _FONT_CANDIDATES:
-        if candidate.is_file():
+        if not candidate.is_file():
+            continue
+        try:
+            metrics_font = fitz.Font(file=str(candidate))
+            fontname = "accident-card-font"
             try:
-                _FONT_CACHE = fitz.Font(file=str(candidate))
-                return _FONT_CACHE
-            except Exception:
-                continue
+                document.insert_font(fontname=fontname, fontfile=str(candidate))
+            except RuntimeError:
+                pass
+            _FONT_CACHE = RenderFont(metrics=metrics_font, fontname=fontname, filepath=str(candidate))
+            return _FONT_CACHE
+        except Exception:
+            continue
 
-    _FONT_CACHE = fitz.Font("helv")
+    fallback_fontname = "helv"
+    fallback_font = fitz.Font(fallback_fontname)
+    _FONT_CACHE = RenderFont(metrics=fallback_font, fontname=fallback_fontname, filepath=None)
     return _FONT_CACHE
