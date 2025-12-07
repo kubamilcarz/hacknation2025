@@ -27,11 +27,6 @@ const FORMAT_OPTIONS: Array<{
     label: "JSON",
     helper: "Struktura danych do integracji z innymi systemami.",
   },
-  {
-    value: "pdf",
-    label: "PDF",
-    helper: "Gotowy do druku raport z tabelą zgłoszeń.",
-  },
 ];
 
 type ExportDocumentsModalProps = {

@@ -75,6 +75,7 @@ class PDFAnonymizer:
         self.padding = max(0.0, padding)
 
     def redact(self, pdf_input: BytesIO | bytes | bytearray | memoryview, fields: Sequence[str] | None = None) -> BytesIO:
+        """Return a PDF copy where selected fields are hidden with opaque boxes."""
         data = self._ensure_bytes(pdf_input)
         doc = fitz.open(stream=data, filetype="pdf")
         target_fields = {name.strip() for name in (fields or self.redacted_fields)}
@@ -91,15 +92,9 @@ class PDFAnonymizer:
                     if rect is None:
                         continue
 
-                    expanded = fitz.Rect(
-                        rect.x0 - self.padding,
-                        rect.y0 - self.padding,
-                        rect.x1 + self.padding,
-                        rect.y1 + self.padding,
-                    )
-                    page.draw_rect(expanded, color=(0, 0, 0), fill=(0, 0, 0))
-                    widget.field_value = ""
-                    widget.update()
+                    expanded = self._expand_rect(rect)
+                    self._cover_region(page, expanded)
+                    self._sanitize_widget(page, widget)
 
             output = BytesIO()
             doc.save(output, garbage=4, deflate=True)
@@ -107,6 +102,58 @@ class PDFAnonymizer:
             return output
         finally:
             doc.close()
+
+    def _expand_rect(self, rect: fitz.Rect) -> fitz.Rect:
+        padding = self.padding
+        return fitz.Rect(
+            rect.x0 - padding,
+            rect.y0 - padding,
+            rect.x1 + padding,
+            rect.y1 + padding,
+        )
+
+    @staticmethod
+    def _cover_region(page: fitz.Page, rect: fitz.Rect) -> None:
+        shape = page.new_shape()
+        shape.draw_rect(rect)
+        shape.finish(color=(0, 0, 0), fill=(0, 0, 0))
+        shape.commit()
+
+    @staticmethod
+    def _sanitize_widget(page: fitz.Page, widget: fitz.Widget) -> None:
+        try:
+            widget.field_value = ""
+            widget.update()
+        except Exception:
+            pass
+
+        remover = getattr(page, "delete_widget", None)
+        if callable(remover):
+            try:
+                remover(widget)
+            except Exception:
+                return
+            return
+
+        remover = getattr(page, "delete_annot", None)
+        if callable(remover):
+            try:
+                remover(widget)
+            except Exception:
+                return
+            return
+
+        hider = getattr(widget, "set_flags", None)
+        if callable(hider):
+            hidden_flags = 0
+            for flag_name in ("ANNOTFLAG_INVISIBLE", "ANNOTFLAG_HIDDEN", "ANNOTFLAG_NOVIEW"):
+                hidden_flags |= getattr(fitz, flag_name, 0)
+            if hidden_flags:
+                try:
+                    hider(hidden_flags)
+                    widget.update()
+                except Exception:
+                    return
 
     @staticmethod
     def _ensure_bytes(pdf_input: BytesIO | bytes | bytearray | memoryview) -> bytes:

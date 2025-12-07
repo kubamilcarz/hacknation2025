@@ -173,15 +173,6 @@ export function ReviewStepSection() {
                   {isDownloadingPdf && <Spinner size={16} />}
                   Pobierz PDF
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDownloadAnonymized()}
-                  disabled={!canDownload || isDownloadingAnonymized}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-4 py-2 text-sm font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isDownloadingAnonymized && <Spinner size={16} />}
-                  Pobierz zanonimizowany PDF
-                </button>
               </div>
           </div>
         </div>

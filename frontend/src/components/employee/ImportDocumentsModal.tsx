@@ -242,25 +242,27 @@ export default function ImportDocumentsModal({ isOpen, onClose }: ImportDocument
                 {failedImports} nieudanych
               </span>
             </div>
-            <ul className="space-y-3">
-              {importItems.map((item) => (
-                <li
-                  key={item.id}
-                  className={`rounded-lg border px-4 py-3 text-sm shadow-sm transition ${
-                    item.status === "success"
-                      ? "border-(--color-success) bg-(--color-success-soft) text-(--color-success)"
-                      : item.status === "error"
-                        ? "border-(--color-error) bg-(--color-error-soft) text-(--color-error)"
-                        : "border-subtle bg-surface text-secondary"
-                  }`}
-                >
-                  <div className="flex flex-col gap-1">
-                    <span className="font-semibold text-primary">{item.fileName}</span>
-                    <span>{item.message}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="max-h-64 overflow-y-auto pr-1">
+              <ul className="space-y-3">
+                {importItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className={`rounded-lg border px-4 py-3 text-sm shadow-sm transition ${
+                      item.status === "success"
+                        ? "border-(--color-success) bg-(--color-success-soft) text-(--color-success)"
+                        : item.status === "error"
+                          ? "border-(--color-error) bg-(--color-error-soft) text-(--color-error)"
+                          : "border-subtle bg-surface text-secondary"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-1">
+                      <span className="font-semibold text-primary">{item.fileName}</span>
+                      <span>{item.message}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         ) : (
           <div className="rounded-lg border border-subtle bg-surface px-4 py-6 text-sm text-muted">

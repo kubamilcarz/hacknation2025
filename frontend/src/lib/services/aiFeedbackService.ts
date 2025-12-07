@@ -29,6 +29,8 @@ const DEFAULT_MODE: AiFeedbackMode =
 		? "api"
 		: "mock";
 
+type BackendRequestMapper = (request: AiFeedbackRequest) => unknown;
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class MockAiFeedbackService implements AiFeedbackService {
@@ -69,10 +71,13 @@ class MockAiFeedbackService implements AiFeedbackService {
 }
 
 class ApiAiFeedbackService implements AiFeedbackService {
-	constructor(private readonly endpoint: string = DEFAULT_ENDPOINT) {}
+	constructor(
+		private readonly endpoint: string = DEFAULT_ENDPOINT,
+		private readonly requestMapper: BackendRequestMapper = buildBackendAiRequest,
+	) {}
 
 	async getFeedback(request: AiFeedbackRequest): Promise<AiFeedbackResponse> {
-		const backendPayload = buildBackendAiRequest(request);
+		const backendPayload = this.requestMapper(request);
 		let response: Response;
 
 		try {
@@ -114,6 +119,7 @@ interface CreateAiFeedbackServiceOptions {
 	endpoint?: string;
 	mockLatencyMs?: number;
 	backendBaseUrl?: string;
+	requestMapper?: BackendRequestMapper;
 }
 
 export function createAiFeedbackService(
@@ -123,7 +129,8 @@ export function createAiFeedbackService(
 	if (mode === "api") {
 		const baseUrl = options.backendBaseUrl ?? DEFAULT_BACKEND_URL;
 		const endpoint = options.endpoint ?? buildEndpoint(baseUrl, "/api/user-recommendation/");
-		return new ApiAiFeedbackService(endpoint);
+		const mapper = options.requestMapper ?? buildBackendAiRequest;
+		return new ApiAiFeedbackService(endpoint, mapper);
 	}
 
 	return new MockAiFeedbackService(options.mockLatencyMs ?? 1200);

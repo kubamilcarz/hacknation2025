@@ -39,6 +39,8 @@ export default function DocumentDetail() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isGeneratingAccidentCard, setIsGeneratingAccidentCard] = useState(false);
   const [accidentCardError, setAccidentCardError] = useState<string | null>(null);
+  const [isDownloadingAnonymized, setIsDownloadingAnonymized] = useState(false);
+  const [anonymizedError, setAnonymizedError] = useState<string | null>(null);
   const [pkdProfile, setPkdProfile] = useState<PkdProfileMock | null>(null);
   const [isPkdLoading, setIsPkdLoading] = useState(false);
   const [pkdError, setPkdError] = useState<string | null>(null);
@@ -222,10 +224,16 @@ export default function DocumentDetail() {
       return;
     }
 
+    setAnonymizedError(null);
+    setIsDownloadingAnonymized(true);
+
     try {
       await downloadAnonymizedDocument(documentData.id);
     } catch (err) {
       console.error(err);
+      setAnonymizedError('Nie udało się pobrać zanonimizowanego pliku. Spróbuj ponownie.');
+    } finally {
+      setIsDownloadingAnonymized(false);
     }
   };
 
@@ -340,13 +348,18 @@ export default function DocumentDetail() {
                     <button
                       type="button"
                       onClick={handleDownloadAnonymized}
+                      disabled={isDownloadingAnonymized}
+                      aria-busy={isDownloadingAnonymized}
                       className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-4 py-2 text-sm font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                     >
-                      Pobierz zanonimizowany
+                      {isDownloadingAnonymized ? 'Pobieranie…' : 'Pobierz zanonimizowany'}
                     </button>
                   </div>
                   {accidentCardError && (
                     <p className="text-sm text-(--color-error)">{accidentCardError}</p>
+                  )}
+                  {anonymizedError && (
+                    <p className="text-sm text-(--color-error)">{anonymizedError}</p>
                   )}
                 </div>
               </section>
@@ -367,6 +380,7 @@ export default function DocumentDetail() {
                         entry={entry}
                         documentData={documentData}
                         onDownloadAnonymized={handleDownloadAnonymized}
+                        isAnonymizedDownloading={isDownloadingAnonymized}
                       />
                     );
                   })}
@@ -488,24 +502,14 @@ type AssessmentCardProps = {
   entry: EmployeeDocumentAssessmentEntry;
   documentData: EmployeeDocument;
   onDownloadAnonymized: () => void;
+  isAnonymizedDownloading: boolean;
 };
 
-function AssessmentCard({ section, entry, documentData, onDownloadAnonymized }: AssessmentCardProps) {
+function AssessmentCard({ section, entry, documentData, onDownloadAnonymized, isAnonymizedDownloading }: AssessmentCardProps) {
   const cardOutline = documentDetailService.getAssessmentCardOutline(entry.status);
   const statusClasses = documentDetailService.getAssessmentStatusClasses(entry.status);
   const statusLabel = documentDetailService.getAssessmentStatusLabel(entry.status);
   const actionContent = (() => {
-    if (entry.status === 'met') {
-      return (
-        <button
-          type="button"
-          onClick={onDownloadAnonymized}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-3 py-1.5 text-xs font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-        >
-          Pobierz zanonimizowany PDF
-        </button>
-      );
-    }
 
     if (entry.status === 'partial') {
       return <AssessmentRecommendation section={section} entry={entry} documentData={documentData} />;
@@ -567,6 +571,7 @@ function AssessmentRecommendation({ section, entry, documentData }: AssessmentRe
         sectionKey: section.key,
         sectionLabel: section.label,
         assessmentStatus: entry.status,
+        assessmentStatusLabel: documentDetailService.getAssessmentStatusLabel(entry.status),
         assessmentSummary: entry.summary,
         previousRecommendation: entry.recommendation ?? null,
         responseAudience: 'claimant',

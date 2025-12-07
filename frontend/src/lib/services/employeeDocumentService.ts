@@ -605,7 +605,17 @@ async function analyzePdfWithBackend(
       assessment,
     };
   } catch (error) {
-    console.error("Nie udało się przetworzyć PDF na backendzie", error);
+    const typedError = error instanceof Error ? error : new Error(String(error));
+    const hint =
+      typedError.name === "TypeError"
+        ? "Nie udało się połączyć z serwerem OCR. Upewnij się, że backend działa (domyślnie http://localhost:8000)."
+        : "Nie udało się przetworzyć PDF na backendzie.";
+
+    if (process.env.NODE_ENV === "production") {
+      console.warn(hint);
+    } else {
+      console.warn(`${hint}\nSzczegóły:`, typedError);
+    }
     return fallback;
   }
 }
