@@ -1,5 +1,3 @@
-import { mockEmployeeDocumentSeed } from "@/lib/mock-employee-documents";
-import type { EmployeeDocumentSeed } from "@/lib/mock-employee-documents";
 import type {
   CreateEmployeeDocumentDto,
   EmployeeDocumentDetailDto,
@@ -9,7 +7,6 @@ import type {
 import {
   mapEmployeeDocumentDetailDtoToDomain,
   mapEmployeeDocumentListItemDtoToDomain,
-  mapEmployeeDocumentToDetailDto,
 } from "@/lib/mappers/employeeDocumentMapper";
 import type { EmployeeDocument } from "@/types/employeeDocument";
 
@@ -38,7 +35,6 @@ const PDF_TABLE_COLUMNS: Array<ExportColumn & { lengthHint?: number }> = [
 ];
 
 const EXPORT_FILE_PREFIX = "dokumenty-pracownicze";
-const NETWORK_DELAY_MS = 400;
 const PDF_FONT_NAME = "Inter";
 const PDF_FONT_BASE_PATH = "/fonts";
 const PDF_EXPORT_TARGET_SELECTOR = "[data-export-pdf-target='employee-documents-table']";
@@ -80,7 +76,8 @@ const PDF_FONT_VARIANTS: PdfFontVariant[] = [
 
 let pdfFontRegistrationPromise: Promise<Record<string, string>> | null = null;
 
-const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_MS));
+const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const PDF_UPLOAD_ENDPOINT = "/api/upload-pdf/";
 
 export type EmployeeDocumentListSortField = "uploaded_at" | "file_name" | "analysis_status";
 
@@ -178,18 +175,17 @@ class DefaultEmployeeDocumentService implements EmployeeDocumentService {
   }
 }
 
-class MockEmployeeDocumentApi implements EmployeeDocumentApi {
-  private documents: EmployeeDocumentDetailDto[];
-  private nextId: number;
+class HttpEmployeeDocumentApi implements EmployeeDocumentApi {
+  private documents: EmployeeDocumentDetailDto[] = [];
+  private nextId = 1;
   private fileStorage = new Map<number, Blob>();
   private pendingExportFormat: EmployeeDocumentExportFormat | null = null;
+  private readonly uploadUrl: string;
 
-  constructor(seed: EmployeeDocumentSeed[]) {
-    this.documents = seed.map((document) => mapEmployeeDocumentToDetailDto(document));
-    seed.forEach((document) => {
-      this.fileStorage.set(document.id, createMockPdfBlob(document.mockContent));
-    });
-    this.nextId = this.calculateNextId();
+  constructor(baseUrl: string = DEFAULT_BACKEND_URL) {
+    const normalized = baseUrl.trim();
+    const effective = normalized.length > 0 ? normalized : DEFAULT_BACKEND_URL;
+    this.uploadUrl = buildEndpoint(effective, PDF_UPLOAD_ENDPOINT);
   }
 
   setExportFormat(format: EmployeeDocumentExportFormat) {
@@ -203,7 +199,6 @@ class MockEmployeeDocumentApi implements EmployeeDocumentApi {
   }
 
   async list(options?: EmployeeDocumentListOptions): Promise<EmployeeDocumentListResponseDto> {
-    await delay();
     const sortField: EmployeeDocumentListSortField = options?.sort ?? "uploaded_at";
     const direction: "asc" | "desc" = options?.direction === "asc" || options?.direction === "desc"
       ? options.direction
@@ -282,35 +277,37 @@ class MockEmployeeDocumentApi implements EmployeeDocumentApi {
   }
 
   async getById(id: number): Promise<EmployeeDocumentDetailDto | null> {
-    await delay();
     const document = this.documents.find((entry) => entry.id === id);
     return document ? { ...document } : null;
   }
 
   async upload(payload: CreateEmployeeDocumentDto, fileData: Blob): Promise<EmployeeDocumentDetailDto> {
-    await delay();
+    const description = await analyzePdfWithBackend(fileData, this.uploadUrl);
     const id = this.generateId();
+
     const dto: EmployeeDocumentDetailDto = {
       ...payload,
       id,
-      storage_url: `mock-storage://${id}`,
+      storage_url: `local-upload://${id}`,
+      analysis_status: description.status,
+      incident_description: description.text,
+      description_source: description.source,
     };
+
     this.documents = [{ ...dto }, ...this.documents];
     this.fileStorage.set(id, fileData.slice(0, fileData.size, fileData.type));
     return { ...dto };
   }
 
   async downloadOriginal(id: number): Promise<Blob> {
-    await delay();
     const blob = this.fileStorage.get(id);
     if (!blob) {
-      throw new Error("Nie znaleziono pliku źródłowego.");
+      throw new Error("Nie znaleziono pliku źródłowego (przechowywanego lokalnie).");
     }
     return blob;
   }
 
   async downloadAnonymized(id: number): Promise<Blob> {
-    await delay();
     const dto = this.documents.find((document) => document.id === id);
     if (!dto) {
       throw new Error("Nie znaleziono dokumentu do anonimizacji.");
@@ -365,10 +362,6 @@ class MockEmployeeDocumentApi implements EmployeeDocumentApi {
     return Math.max(1, Math.floor(value));
   }
 
-  private calculateNextId() {
-    return (this.documents.reduce((acc, document) => Math.max(acc, document.id ?? 0), 0) || 0) + 1;
-  }
-
   private generateId() {
     const id = this.nextId;
     this.nextId += 1;
@@ -377,7 +370,7 @@ class MockEmployeeDocumentApi implements EmployeeDocumentApi {
 }
 
 export const employeeDocumentService: EmployeeDocumentService = new DefaultEmployeeDocumentService(
-  new MockEmployeeDocumentApi(mockEmployeeDocumentSeed)
+  new HttpEmployeeDocumentApi(DEFAULT_BACKEND_URL)
 );
 
 async function ensurePdfFont(doc: import("jspdf").jsPDF) {
@@ -455,14 +448,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   return btoa(binary);
 }
 
-function createMockPdfBlob(content: string) {
-  const header = "Mock PDF – dane zapisane w trakcie hackathonu.\n";
-  return new Blob([header + content], { type: "application/pdf" });
-}
-
 async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDocumentDto> {
   const now = new Date().toISOString();
-  const description = await mockAnalyzePdf(file);
   const defaultRecommendation =
     "System analizuje dokument. W razie potrzeby poproś klienta o doprecyzowanie opisanej przesłanki.";
   const defaultAssessmentEntry = (summary: string) => ({
@@ -477,7 +464,7 @@ async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDoc
     file_type: file.type || "application/pdf",
     storage_url: "pending",
     uploaded_at: now,
-    incident_description: description,
+    incident_description: "Analiza dokumentu została zainicjowana na serwerze.",
     analysis_status: "processing",
     description_source: "ai",
     assessment: {
@@ -489,26 +476,60 @@ async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDoc
   };
 }
 
-async function mockAnalyzePdf(file: File): Promise<string> {
-  await delay();
-  const baseName = (file.name || "dokument").replace(/\.pdf$/i, "");
-  const scenarios = [
-    "AI wykryła brak zabezpieczenia strefy pracy.",
-    "W logach maszyny znaleziono ostrzeżenie o przeciążeniu.",
-    "Opis sugeruje niekompletne środki ochrony indywidualnej.",
-    "System wskazał konieczność konsultacji z inspektorem BHP.",
-  ];
-  const index = Math.abs(hashString(baseName + file.size)) % scenarios.length;
-  return `${baseName}: ${scenarios[index]}`;
+type PdfAnalysisResult = {
+  text: string;
+  status: EmployeeDocumentDetailDto["analysis_status"];
+  source: "ai" | "manual";
+};
+
+async function analyzePdfWithBackend(fileData: Blob, uploadUrl: string): Promise<PdfAnalysisResult> {
+  const fallback: PdfAnalysisResult = {
+    text: "Nie udało się odczytać opisu z przesłanego pliku. Uzupełnij dane ręcznie.",
+    status: "failed",
+    source: "manual",
+  };
+
+  const formData = new FormData();
+  const fileName = typeof (fileData as File).name === "string" && (fileData as File).name.trim().length > 0
+    ? (fileData as File).name
+    : "dokument.pdf";
+  formData.append("pdf", fileData, fileName);
+
+  try {
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = (await response.text().catch(() => "")).trim();
+      console.warn(
+        "Backend upload-pdf endpoint zwrócił kod %s. Treść odpowiedzi: %s",
+        response.status,
+        errorText
+      );
+      return {
+        ...fallback,
+        text: errorText.length > 0 ? errorText : fallback.text,
+      };
+    }
+
+    const description = (await response.text().catch(() => "")).trim();
+    return {
+      text: description.length > 0 ? description : fallback.text,
+      status: "completed",
+      source: "ai",
+    } satisfies PdfAnalysisResult;
+  } catch (error) {
+    console.error("Nie udało się przetworzyć PDF na backendzie", error);
+    return fallback;
+  }
 }
 
-function hashString(value: string) {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash;
+function buildEndpoint(baseUrl: string, path: string) {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return trimmedBase ? `${trimmedBase}${normalizedPath}` : normalizedPath;
 }
 
 function downloadCsv(items: EmployeeDocument[]) {

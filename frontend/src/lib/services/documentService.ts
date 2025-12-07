@@ -1,29 +1,15 @@
-import { defaultDocumentData, mockDocuments } from "../mock-documents";
 import type { CreateDocumentDto, DocumentDetailDto, DocumentListResponseDto } from "@/lib/dtos/documentDtos";
-import { mapDocumentDetailDtoToDocument, mapDocumentListItemDtoToDocument, mapDocumentToDetailDto, mapPartialDocumentToCreateDto } from "@/lib/mappers/documentMapper";
+import { mapDocumentDetailDtoToDocument, mapDocumentListItemDtoToDocument, mapPartialDocumentToCreateDto } from "@/lib/mappers/documentMapper";
 import type { Document } from "@/types/document";
 import type { jsPDF } from "jspdf";
 
 export type DocumentExportFormat = "csv" | "excel" | "json" | "pdf";
 
 const EXPORT_FILE_PREFIX = "dokumenty-wypadkowe";
-const NETWORK_DELAY_MS = 350;
-
-const delay = () => new Promise((resolve) => setTimeout(resolve, NETWORK_DELAY_MS));
+const DOCUMENTS_ENDPOINT = "/api/documents/";
+const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
 type ExportColumn = { label: string; accessor: (document: Document) => string };
-
-const PDF_FONT_NAME = "Inter";
-const PDF_FONT_BASE_PATH = "/fonts";
-
-type PdfFontVariant = { file: string; style: "normal" | "bold" };
-
-const PDF_FONT_VARIANTS: PdfFontVariant[] = [
-  { file: "Inter-Regular.ttf", style: "normal" },
-  { file: "Inter-Bold.ttf", style: "bold" },
-];
-
-let pdfFontRegistrationPromise: Promise<Record<string, string>> | null = null;
 
 const EXPORT_COLUMNS: ExportColumn[] = [
   { label: "ID", accessor: (document) => String(document.id ?? "-") },
@@ -35,6 +21,16 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { label: "Miejsce wypadku", accessor: (document) => document.miejsce_wypadku },
   { label: "Rodzaj urazów", accessor: (document) => document.rodzaj_urazow },
   { label: "Czy udzielono pomocy", accessor: (document) => (document.czy_udzielona_pomoc ? "Tak" : "Nie") },
+];
+
+const PDF_FONT_NAME = "Inter";
+const PDF_FONT_BASE_PATH = "/fonts";
+
+type PdfFontVariant = { file: string; style: "normal" | "bold" };
+
+const PDF_FONT_VARIANTS: PdfFontVariant[] = [
+  { file: "Inter-Regular.ttf", style: "normal" },
+  { file: "Inter-Bold.ttf", style: "bold" },
 ];
 
 const PDF_TABLE_COLUMNS: Array<ExportColumn & { lengthHint?: number }> = [
@@ -66,6 +62,8 @@ function normalizeCellValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+let pdfFontRegistrationPromise: Promise<Record<string, string>> | null = null;
+
 async function ensurePdfFont(doc: jsPDF) {
   if (typeof window === "undefined") {
     return;
@@ -95,8 +93,6 @@ async function ensurePdfFont(doc: jsPDF) {
 
       try {
         doc.addFileToVFS(variant.file, fontBase64);
-        // In jsPDF v3, the signature is: addFont(fileNameInVFS, fontName, fontStyle)
-        // The fontStyle parameter should match the weight (normal/bold)
         const fontWeight = variant.style === "bold" ? "bold" : "normal";
         doc.addFont(variant.file, PDF_FONT_NAME, fontWeight);
         fontRegistered = true;
@@ -146,8 +142,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   let binary = "";
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
     binary += String.fromCharCode(...chunk);
   }
 
@@ -232,238 +228,187 @@ class DefaultDocumentService implements DocumentService {
   }
 }
 
-class MockDocumentApi implements DocumentApi {
-  private documents: DocumentDetailDto[];
-  private pendingExportFormat: DocumentExportFormat | null = null;
-  private nextId: number;
+type HttpDocumentApiOptions = {
+  baseUrl?: string;
+};
 
-  constructor(seed: Document[]) {
-    this.documents = seed.map((document) => this.cloneDto(mapDocumentToDetailDto(document)));
-    this.nextId = this.calculateNextId();
+class HttpDocumentApi implements DocumentApi {
+  private readonly baseUrl: string;
+  private readonly documentsUrl: string;
+
+  constructor(options: HttpDocumentApiOptions = {}) {
+    const normalizedBase = (options.baseUrl ?? DEFAULT_BACKEND_URL).trim();
+    this.baseUrl = normalizedBase.length > 0 ? normalizedBase : DEFAULT_BACKEND_URL;
+    this.documentsUrl = buildEndpoint(this.baseUrl, DOCUMENTS_ENDPOINT);
   }
 
   setExportFormat(format: DocumentExportFormat) {
-    this.pendingExportFormat = format;
-  }
-
-  private consumeExportFormat() {
-    const format = this.pendingExportFormat;
-    this.pendingExportFormat = null;
-    return format;
+    // Backend does not yet expose export format handling.
+    void format;
   }
 
   async list(options?: DocumentListOptions): Promise<DocumentListResponseDto> {
-    await delay();
-
-    const sortField: DocumentListSortField = options?.sort && this.isSortableField(options.sort)
-      ? options.sort
-      : "data_wypadku";
-    const direction: "asc" | "desc" = options?.direction === "asc" || options?.direction === "desc"
-      ? options.direction
-      : sortField === "data_wypadku"
-        ? "desc"
-        : "asc";
-
-    const helpProvidedFilter =
-      typeof options?.helpProvided === "boolean" ? options.helpProvided : null;
-    const machineInvolvedFilter =
-      typeof options?.machineInvolved === "boolean" ? options.machineInvolved : null;
-
-    const normalizedPageSize = this.normalizePositiveInteger(options?.pageSize, 10);
-    const normalizedPage = this.normalizePositiveInteger(options?.page, 1);
-    const searchTerm = options?.search?.trim().toLowerCase() ?? "";
-
-    const filtered = this.documents.filter((document) => {
-      if (helpProvidedFilter !== null && document.czy_udzielona_pomoc !== helpProvidedFilter) {
-        return false;
-      }
-
-      if (
-        machineInvolvedFilter !== null &&
-        document.czy_wypadek_podczas_uzywania_maszyny !== machineInvolvedFilter
-      ) {
-        return false;
-      }
-
-      if (!searchTerm) {
-        return true;
-      }
-
-      const haystack = [
-        document.imie,
-        document.nazwisko,
-        document.pesel,
-        document.miejsce_wypadku,
-        document.rodzaj_urazow,
-        document.szczegoly_okolicznosci,
-        document.organ_postepowania ?? "",
-      ];
-
-      return haystack.some((value) => value.toLowerCase().includes(searchTerm));
-    });
-
-    const sorted = filtered.slice().sort((first, second) => {
-      const firstValue = this.getComparableValue(first, sortField);
-      const secondValue = this.getComparableValue(second, sortField);
-
-      if (firstValue === secondValue) {
-        return 0;
-      }
-
-      if (firstValue == null) {
-        return direction === "asc" ? -1 : 1;
-      }
-
-      if (secondValue == null) {
-        return direction === "asc" ? 1 : -1;
-      }
-
-      if (typeof firstValue === "number" && typeof secondValue === "number") {
-        return direction === "asc" ? firstValue - secondValue : secondValue - firstValue;
-      }
-
-      return direction === "asc"
-        ? firstValue.toString().localeCompare(secondValue.toString(), "pl")
-        : secondValue.toString().localeCompare(firstValue.toString(), "pl");
-    });
-
-    const totalCount = sorted.length;
-    const totalPages = Math.max(1, Math.ceil(totalCount / normalizedPageSize));
-    const safePage = Math.min(normalizedPage, totalPages);
-    const startIndex = (safePage - 1) * normalizedPageSize;
-    const paged = sorted.slice(startIndex, startIndex + normalizedPageSize).map((document) => this.cloneDto(document));
-
-    const response: DocumentListResponseDto = {
-      items: paged,
-      totalCount,
-      totalPages,
-      page: safePage,
-      pageSize: normalizedPageSize,
-    } satisfies DocumentListResponseDto;
-
-    const format = this.consumeExportFormat();
-    if (!format || (format === "csv" && typeof document === "undefined")) {
-      return response;
+    const params = new URLSearchParams();
+    params.set("action", "list");
+    if (options?.search) {
+      params.set("search", options.search);
     }
 
-    this.handleExport(format, sorted);
-    return { ...response, items: [] } satisfies DocumentListResponseDto;
+    try {
+      const response = await fetch(`${this.documentsUrl}?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.warn("API list documents not available yet (status %s). Returning empty list.", response.status);
+        return createEmptyListResponse(options);
+      }
+
+      const payload = (await response.json().catch(() => null)) as Partial<DocumentListResponseDto> | null;
+      if (!payload || !Array.isArray(payload.items)) {
+        return createEmptyListResponse(options);
+      }
+
+      return {
+        items: payload.items ?? [],
+        totalCount: payload.totalCount ?? payload.items.length ?? 0,
+        totalPages: payload.totalPages ?? 1,
+        page: payload.page ?? 1,
+        pageSize: payload.pageSize ?? (options?.pageSize ?? 10),
+      } satisfies DocumentListResponseDto;
+    } catch (error) {
+      console.error("Nie udało się pobrać listy zgłoszeń z backendu", error);
+      return createEmptyListResponse(options);
+    }
   }
 
   async getById(id: number): Promise<DocumentDetailDto | null> {
-    await delay();
-    const found = this.documents.find((document) => document.id === id);
-    return found ? this.cloneDto(found) : null;
+    const params = new URLSearchParams();
+    params.set("action", "detail");
+    params.set("id", String(id));
+
+    try {
+      const response = await fetch(`${this.documentsUrl}?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = (await response.json().catch(() => null)) as DocumentDetailDto | null;
+      return payload ?? null;
+    } catch (error) {
+      console.error("Nie udało się pobrać szczegółów zgłoszenia", error);
+      return null;
+    }
   }
 
   async create(payload: CreateDocumentDto): Promise<DocumentDetailDto> {
-    await delay();
-    const newId = this.generateId();
-    const { witnesses: payloadWitnesses, ...restPayload } = payload;
+    const { witnesses: _witnesses, ...documentPayload } = payload;
+    let response: Response;
 
-    const base = mapDocumentToDetailDto(defaultDocumentData);
-    const newDocument: DocumentDetailDto = {
-      ...base,
-      ...restPayload,
-      id: newId,
-      witnesses:
-        payloadWitnesses && payloadWitnesses.length > 0
-          ? payloadWitnesses.map((witness) => ({
-              ...witness,
-              documentId: witness.documentId ?? newId,
-              id: witness.id,
-            }))
-          : undefined,
-    };
+    try {
+      response = await fetch(this.documentsUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "create", ...documentPayload }),
+      });
+    } catch (error) {
+      throw new Error("Nie udało się połączyć z serwerem. Sprawdź połączenie i spróbuj ponownie.");
+    }
 
-    const storedDocument = this.cloneDto(newDocument);
-    this.documents = [storedDocument, ...this.documents];
-    return this.cloneDto(storedDocument);
+    if (!response.ok) {
+      const details = await safeReadError(response);
+      if (details) {
+        throw new Error(`Nie udało się zapisać zgłoszenia. ${details}`);
+      }
+      throw new Error(`Nie udało się zapisać zgłoszenia (kod ${response.status}).`);
+    }
+
+    const json = (await response.json().catch(() => null)) as DocumentDetailDto | null;
+    if (!json || typeof json !== "object") {
+      throw new Error("Serwer zwrócił nieoczekiwaną odpowiedź podczas zapisywania zgłoszenia.");
+    }
+
+    return json;
   }
 
   async downloadAttachment(id: number, format: "docx" | "pdf"): Promise<void> {
-    await delay();
-    const found = this.documents.find((document) => document.id === id);
-    if (!found) {
-      throw new Error("Nie znaleziono zgłoszenia do pobrania.");
+    throw new Error("Pobieranie dokumentów nie jest jeszcze dostępne w trybie API.");
+  }
+}
+function buildEndpoint(baseUrl: string, path: string) {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (!trimmedBase) {
+    return normalizedPath;
+  }
+
+  return `${trimmedBase}${normalizedPath}`;
+}
+
+function createEmptyListResponse(options?: DocumentListOptions): DocumentListResponseDto {
+  const pageSizeCandidate = options?.pageSize;
+  const pageSize = typeof pageSizeCandidate === "number" && pageSizeCandidate > 0 ? pageSizeCandidate : 10;
+  return {
+    items: [],
+    totalCount: 0,
+    totalPages: 1,
+    page: 1,
+    pageSize,
+  } satisfies DocumentListResponseDto;
+}
+
+async function safeReadError(response: Response): Promise<string | null> {
+  try {
+    const text = (await response.text()).trim();
+    if (!text) {
+      return null;
     }
 
-    const domainDocument = mapDocumentDetailDtoToDocument(found);
-    await downloadDocumentSummary(domainDocument, format, {
-      fileName: `zgloszenie-${id}.${format === "pdf" ? "pdf" : "docx"}`,
-    });
-  }
-
-  private handleExport(format: DocumentExportFormat, documents: DocumentDetailDto[]) {
-    const domainDocuments = documents.map(mapDocumentDetailDtoToDocument);
-    switch (format) {
-      case "excel":
-        downloadExcel(domainDocuments);
-        break;
-      case "json":
-        downloadJson(domainDocuments);
-        break;
-      case "pdf":
-        downloadPdf(domainDocuments);
-        break;
-      default:
-        break;
-    }
-  }
-
-  private isSortableField(field: string): field is DocumentListSortField {
-    return ["id", "imie", "nazwisko", "pesel", "data_wypadku", "miejsce_wypadku"].includes(field as DocumentListSortField);
-  }
-
-  private getComparableValue(document: DocumentDetailDto, field: DocumentListSortField) {
-    switch (field) {
-      case "id":
-        return document.id ?? null;
-      case "imie":
-        return document.imie;
-      case "nazwisko":
-        return document.nazwisko;
-      case "pesel":
-        return document.pesel;
-      case "miejsce_wypadku":
-        return document.miejsce_wypadku;
-      case "data_wypadku":
-        return document.data_wypadku;
-      default:
-        return null;
-    }
-  }
-
-  private normalizePositiveInteger(value: number | string | null | undefined, fallback: number) {
-    if (typeof value === "string") {
-      const parsed = Number.parseInt(value, 10);
-      if (!Number.isNaN(parsed)) {
-        return Math.max(1, parsed);
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (typeof parsed === "string") {
+        return parsed;
       }
-      return fallback;
+
+      if (Array.isArray(parsed)) {
+        const flattened = parsed
+          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+          .filter((entry) => entry.length > 0);
+        return flattened.length > 0 ? flattened.join(" ") : text;
+      }
+
+      if (parsed && typeof parsed === "object") {
+        const detail = (parsed as { detail?: unknown }).detail;
+        if (typeof detail === "string" && detail.trim().length > 0) {
+          return detail.trim();
+        }
+
+        const values = Object.values(parsed as Record<string, unknown>)
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .filter((value) => value.length > 0);
+        if (values.length > 0) {
+          return values.join(" ");
+        }
+      }
+    } catch (error) {
+      // Ignore JSON parse errors and fall back to raw text.
     }
 
-    if (typeof value !== "number" || Number.isNaN(value)) {
-      return fallback;
-    }
-    return Math.max(1, Math.floor(value));
-  }
-
-  private calculateNextId() {
-    return (this.documents.reduce((acc, document) => Math.max(acc, document.id ?? 0), 0) || 0) + 1;
-  }
-
-  private generateId() {
-    const id = this.nextId;
-    this.nextId += 1;
-    return id;
-  }
-
-  private cloneDto(document: DocumentDetailDto): DocumentDetailDto {
-    return {
-      ...document,
-      witnesses: document.witnesses?.map((witness) => ({ ...witness })),
-    } satisfies DocumentDetailDto;
+    return text;
+  } catch (error) {
+    return null;
   }
 }
 
@@ -840,14 +785,8 @@ function ensureFileExtension(fileName: string, extension: string) {
   return `${withoutExtension}.${extension}`;
 }
 
-const useMock = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
-
-const documentService: DocumentService = (() => {
-  const api: DocumentApi = useMock
-    ? new MockDocumentApi(mockDocuments)
-    : new MockDocumentApi(mockDocuments);
-
-  return new DefaultDocumentService(api);
-})();
+const documentService: DocumentService = new DefaultDocumentService(
+  new HttpDocumentApi({ baseUrl: DEFAULT_BACKEND_URL })
+);
 
 export { documentService, downloadDocumentSummary };

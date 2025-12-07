@@ -1,2 +1,5 @@
 /backend/ocr/ocr_output/
 /backend/ocr/sample_scanned.pdf
+**/venv/
+**.env
+**.env.local

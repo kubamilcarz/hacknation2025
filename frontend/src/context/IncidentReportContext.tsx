@@ -10,7 +10,7 @@ import {
   witnessFieldKey,
 } from '@/components/user/dashboard/witnesses/utils';
 import { defaultDocumentData } from '@/lib/mock-documents';
-import { downloadDocumentSummary } from '@/lib/services/documentService';
+import { documentService, downloadDocumentSummary } from '@/lib/services/documentService';
 import type { CreateDocumentInput } from '@/lib/services/documentService';
 import type { Document } from '@/types/document';
 
@@ -777,23 +777,23 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
         szczegoly_okolicznosci: (incidentDraft.szczegoly_okolicznosci ?? '').trim(),
       };
 
-      await new Promise((resolve) => {
-        setTimeout(resolve, 200);
-      });
+      const createdDocument = await documentService.create(payload);
 
       const summaryDocument: Document = {
-        ...defaultDocumentData,
-        ...payload,
-        id: undefined,
-      };
+        ...createdDocument,
+        witnesses: sanitizedWitnesses.length > 0 ? sanitizedWitnesses : createdDocument.witnesses,
+      } satisfies Document;
 
       setPreparedDocument(summaryDocument);
-      setSubmittedDocumentId(Date.now());
+      const resolvedId = typeof createdDocument.id === 'number' ? createdDocument.id : Date.now();
+      setSubmittedDocumentId(resolvedId);
       setSubmitState('success');
     } catch (error) {
       console.error(error);
       setSubmitState('error');
-      setSubmitError('Nie udało się przygotować formularza. Spróbuj ponownie.');
+      const fallbackMessage =
+        error instanceof Error ? error.message : 'Nie udało się przygotować formularza. Spróbuj ponownie.';
+      setSubmitError(fallbackMessage);
     }
   }, [incidentDraft, submitState]);
 
