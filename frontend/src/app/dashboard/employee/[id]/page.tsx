@@ -513,11 +513,11 @@ function AssessmentCard({ section, entry, documentData, onDownloadAnonymized, is
   const statusLabel = documentDetailService.getAssessmentStatusLabel(entry.status);
   const actionContent = (() => {
 
-    if (entry.status === 'partial') {
+    // if (entry.status === 'partial') {
       return <AssessmentRecommendation section={section} entry={entry} documentData={documentData} />;
-    }
+    // }
 
-    return null;
+    // return null;
   })();
 
   return (

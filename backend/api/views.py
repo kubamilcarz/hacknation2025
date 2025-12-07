@@ -388,10 +388,22 @@ def zus_recommendation_view(request):
 
 @csrf_exempt
 def user_recommendation_view(request):
-    request_data = json.loads(request.body)
+    if request.method != "POST":
+        return HttpResponse("Only POST allowed", status=405, content_type="text/plain")
+
+    try:
+        request_data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return HttpResponse("Invalid JSON data", status=400, content_type="text/plain")
 
     data = request_data.get("data")
     field_name = request_data.get("field_name")
+    history = request_data.get("history")
+    if isinstance(history, (dict, list)):
+        history = json.dumps(history, ensure_ascii=False)
+
+    if data is None or field_name is None:
+        return HttpResponse("Missing required fields: 'data' and 'field_name' must be provided.", status=400, content_type="text/plain")
 
     return JsonResponse(chat_client.user_recommendation(data, field_name), safe=False)
 
