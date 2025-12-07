@@ -529,7 +529,7 @@ export default function EmployeeDashboard() {
               onDownloadDocument={handleDownloadDocument}
             />
           </div>
-          <Footer router={router} showPanelButton={false} />
+          <Footer router={router} />
         </div>
       </div>
 

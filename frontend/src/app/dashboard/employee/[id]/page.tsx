@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAiFeedback } from '@/context/AiFeedbackContext';
 import { useDocuments } from '@/context/DocumentContext';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
+import Footer from '@/components/Footer';
 import {
   DOCUMENT_DETAIL_ASSESSMENT_SECTIONS,
   documentDetailService,
@@ -22,7 +23,7 @@ export default function DocumentDetail() {
   const router = useRouter();
   const params = useParams<{ id?: string }>();
   const documentId = Number.parseInt(params?.id ?? '', 10);
-  const { isLoading, getDocumentById, downloadAccidentCard, downloadAnonymizedDocument } = useDocuments();
+  const { isLoading, getDocumentById, downloadAnonymizedDocument, downloadAccidentCard } = useDocuments();
 
   const documentFromStore = useMemo(
     () => (Number.isNaN(documentId) ? undefined : getDocumentById(documentId)),
@@ -201,7 +202,7 @@ export default function DocumentDetail() {
     setIsGeneratingAccidentCard(false);
   }, [documentData?.id]);
 
-  const handleGenerateAccidentCard = async () => {
+  const handleDownloadAccidentCard = async () => {
     if (documentData?.id == null) {
       return;
     }
@@ -213,7 +214,7 @@ export default function DocumentDetail() {
       await downloadAccidentCard(documentData.id);
     } catch (err) {
       console.error(err);
-      setAccidentCardError('Nie udało się wygenerować karty wypadku. Spróbuj ponownie.');
+      setAccidentCardError('Nie udało się pobrać karty wypadku. Spróbuj ponownie.');
     } finally {
       setIsGeneratingAccidentCard(false);
     }
@@ -338,12 +339,12 @@ export default function DocumentDetail() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       type="button"
-                      onClick={handleGenerateAccidentCard}
+                      onClick={handleDownloadAccidentCard}
                       disabled={isGeneratingAccidentCard}
                       aria-busy={isGeneratingAccidentCard}
                       className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isGeneratingAccidentCard ? 'Generowanie...' : 'Stwórz kartę wypadku'}
+                      {isGeneratingAccidentCard ? 'Generowanie…' : 'Pobierz kartę wypadku'}
                     </button>
                     <button
                       type="button"
@@ -352,7 +353,7 @@ export default function DocumentDetail() {
                       aria-busy={isDownloadingAnonymized}
                       className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-4 py-2 text-sm font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                     >
-                      {isDownloadingAnonymized ? 'Pobieranie…' : 'Pobierz zanonimizowany'}
+                      {isDownloadingAnonymized ? 'Pobieranie…' : 'Pobierz zanonimizowany PDF'}
                     </button>
                   </div>
                   {accidentCardError && (
@@ -492,6 +493,7 @@ export default function DocumentDetail() {
             </div>
           )}
         </div>
+        <Footer router={router} />
       </div>
     </div>
   );

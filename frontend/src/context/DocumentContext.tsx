@@ -119,7 +119,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const downloadAnonymizedDocument = useCallback(async (id: number) => {
-    await employeeDocumentService.downloadAnonymized(id);
+    await employeeDocumentService.downloadOriginal(id);
   }, []);
 
   const downloadAccidentCard = useCallback(async (id: number) => {
