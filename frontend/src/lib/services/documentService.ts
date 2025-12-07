@@ -282,6 +282,24 @@ class HttpDocumentApi implements DocumentApi {
     if (options?.search) {
       params.set("search", options.search);
     }
+    if (typeof options?.page === "number" && Number.isFinite(options.page)) {
+      params.set("page", String(Math.max(1, Math.floor(options.page))));
+    }
+    if (typeof options?.pageSize === "number" && Number.isFinite(options.pageSize)) {
+      params.set("pageSize", String(Math.max(1, Math.floor(options.pageSize))));
+    }
+    if (options?.sort) {
+      params.set("sort", options.sort);
+    }
+    if (options?.direction) {
+      params.set("direction", options.direction);
+    }
+    if (typeof options?.helpProvided === "boolean") {
+      params.set("helpProvided", options.helpProvided ? "true" : "false");
+    }
+    if (typeof options?.machineInvolved === "boolean") {
+      params.set("machineInvolved", options.machineInvolved ? "true" : "false");
+    }
 
     try {
       const response = await fetch(`${this.documentsUrl}?${params.toString()}`, {
@@ -305,8 +323,8 @@ class HttpDocumentApi implements DocumentApi {
         items: payload.items ?? [],
         totalCount: payload.totalCount ?? payload.items.length ?? 0,
         totalPages: payload.totalPages ?? 1,
-        page: payload.page ?? 1,
-        pageSize: payload.pageSize ?? (options?.pageSize ?? 10),
+        page: payload.page ?? options?.page ?? 1,
+        pageSize: payload.pageSize ?? options?.pageSize ?? 10,
       } satisfies DocumentListResponseDto;
     } catch (error) {
       console.error("Nie udało się pobrać listy zgłoszeń z backendu", error);

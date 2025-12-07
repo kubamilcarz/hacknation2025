@@ -1,11 +1,14 @@
 from pathlib import Path
 import json
 
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from api.models import Document
 from api.serializers import DocumentSerializer
 from tools.chatgpt import ChatGPTClient
 from tools.pdf_mapper import map_pdf_fields_to_document_data, map_document_to_pdf_fields
@@ -38,6 +41,12 @@ def documents_view(request):
         request_data = request.POST or request.GET
 
     action = request_data.get("action")
+
+    if action == "list":
+        return handle_document_list(request_data)
+
+    if action == "detail":
+        return handle_document_detail(request_data)
 
     if action == "create":
         serializer = DocumentSerializer(data=request_data)
@@ -83,6 +92,133 @@ def documents_view(request):
         response["Content-Disposition"] = "attachment; filename=filled.pdf"
         return response
     return HttpResponse("Invalid action", status=400, content_type="text/plain")
+
+
+def handle_document_list(request_data):
+    queryset = Document.objects.all().prefetch_related("witnesses")
+
+    search_term = request_data.get("search") or request_data.get("q")
+    if search_term:
+        trimmed = str(search_term).strip()
+        if trimmed:
+            queryset = queryset.filter(
+                Q(imie__icontains=trimmed)
+                | Q(nazwisko__icontains=trimmed)
+                | Q(pesel__icontains=trimmed)
+                | Q(miejsce_wypadku__icontains=trimmed)
+            )
+
+    help_param = request_data.get("helpProvided") or request_data.get("help_provided")
+    if help_param is not None and str(help_param).strip() != "":
+        queryset = queryset.filter(czy_udzielona_pomoc=_parse_bool(help_param))
+
+    machine_param = request_data.get("machineInvolved") or request_data.get("machine_involved")
+    if machine_param is not None and str(machine_param).strip() != "":
+        queryset = queryset.filter(czy_wypadek_podczas_uzywania_maszyny=_parse_bool(machine_param))
+
+    sort_param = request_data.get("sort") or request_data.get("orderBy")
+    direction_param = request_data.get("direction") or request_data.get("order")
+    order_by_fields = _resolve_ordering(sort_param, direction_param)
+    if order_by_fields:
+        queryset = queryset.order_by(*order_by_fields)
+    else:
+        queryset = queryset.order_by("-id")
+
+    page_number = _parse_positive_int(request_data.get("page") or request_data.get("pageNumber"), default=1)
+    page_size = _parse_positive_int(
+        request_data.get("page_size")
+        or request_data.get("pageSize")
+        or request_data.get("limit"),
+        default=10,
+        minimum=1,
+        maximum=100,
+    )
+
+    paginator = Paginator(queryset, page_size)
+    try:
+        page = paginator.page(page_number)
+    except PageNotAnInteger:
+        page = paginator.page(1)
+    except EmptyPage:
+        page = paginator.page(paginator.num_pages or 1)
+
+    serializer = DocumentSerializer(page.object_list, many=True)
+    payload = {
+        "items": serializer.data,
+        "totalCount": paginator.count,
+        "totalPages": paginator.num_pages or 1,
+        "page": page.number,
+        "pageSize": page.paginator.per_page,
+    }
+
+    return JsonResponse(payload)
+
+
+def handle_document_detail(request_data):
+    document_id = _parse_positive_int(request_data.get("id") or request_data.get("documentId"))
+    if document_id is None:
+        return HttpResponse("Invalid document id", status=400, content_type="text/plain")
+
+    document = (
+        Document.objects.filter(pk=document_id)
+        .prefetch_related("witnesses")
+        .first()
+    )
+    if not document:
+        return HttpResponse("Document not found", status=404, content_type="text/plain")
+
+    serializer = DocumentSerializer(document)
+    return JsonResponse(serializer.data, safe=False)
+
+
+def _parse_positive_int(value, default=None, minimum=1, maximum=None):
+    if value in (None, ""):
+        return default
+
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        return default
+
+    if minimum is not None and parsed < minimum:
+        return minimum
+    if maximum is not None and parsed > maximum:
+        return maximum
+    return parsed
+
+
+def _parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "tak"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "nie"}:
+        return False
+    return False
+
+
+def _resolve_ordering(sort_param, direction_param):
+    allowed = {
+        "id": "id",
+        "imie": "imie",
+        "nazwisko": "nazwisko",
+        "pesel": "pesel",
+        "data_wypadku": "data_wypadku",
+        "miejsce_wypadku": "miejsce_wypadku",
+    }
+
+    if sort_param not in allowed:
+        return None
+
+    field_name = allowed[sort_param]
+    direction = str(direction_param or "").lower()
+    if direction not in {"asc", "desc"}:
+        direction = "asc" if field_name != "id" else "desc"
+
+    if direction == "desc":
+        return [f"-{field_name}"]
+    return [field_name]
 
 
 def read_document_from_pdf_view(request):

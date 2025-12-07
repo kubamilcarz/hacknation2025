@@ -4,18 +4,30 @@ from api.models import Document, Witness
 
 
 class WitnessSerializer(serializers.ModelSerializer):
+    documentId = serializers.PrimaryKeyRelatedField(source="document", read_only=True)
+
     class Meta:
         model = Witness
-        fields = "__all__"
+        fields = (
+            "id",
+            "documentId",
+            "imie",
+            "nazwisko",
+            "ulica",
+            "nr_domu",
+            "nr_lokalu",
+            "miejscowosc",
+            "kod_pocztowy",
+            "nazwa_panstwa",
+        )
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    witnesses = WitnessSerializer(many=True, read_only=True)
+
     class Meta:
         model = Document
         fields = "__all__"
-        depth = 1
-
-    witnesses = WitnessSerializer(many=True)
 
 
 class DocumentContextSerializer(serializers.ModelSerializer):

@@ -107,4 +107,4 @@ class Witness(models.Model):
     miejscowosc = models.CharField(max_length=255)
     kod_pocztowy = models.CharField(max_length=6)
     nazwa_panstwa = models.CharField(max_length=255, null=True, blank=True)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="witnesses")
