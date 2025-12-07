@@ -20,6 +20,7 @@ export function ReviewStepSection() {
   const canDownload = submittedDocumentId != null;
   const isDownloadingPdf = downloadState === 'pdf';
   const aiContext = useMemo(() => ({ documentData: incidentDraft }), [incidentDraft]);
+  const reviewMetadata = useMemo(() => ({ step: 'review', field: 'summary' as const }), []);
 
   const reviewSummaryInput = useMemo(() => {
     const lines: string[] = [];
@@ -60,7 +61,7 @@ export function ReviewStepSection() {
   const reviewFeedback = useAiFeedback(
     'review_summary',
     reviewSummaryInput,
-    { metadata: { step: 'review', field: 'summary' }, context: aiContext },
+    { metadata: reviewMetadata, context: aiContext, debounceMs: 0 },
   );
 
   const defaultReviewHint = (
@@ -109,11 +110,14 @@ export function ReviewStepSection() {
 
     if (reviewFeedback.message) {
       return (
-        <div className="space-y-2">
-          <p className="whitespace-pre-line leading-6 text-foreground">{reviewFeedback.message}</p>
-          <p className="text-xs text-secondary">
-            Jeśli coś wymaga doprecyzowania, wróć do odpowiedniej sekcji i popraw odpowiedzi przed wygenerowaniem formularza.
-          </p>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Szybkie podsumowanie AI</p>
+            <p className="whitespace-pre-line leading-6 text-foreground">{reviewFeedback.message}</p>
+          </div>
+          <div className="rounded-lg border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-muted">
+            <p>Jeśli widzisz brakujące informacje, wróć do odpowiedniego kroku i popraw treść przed pobraniem formularza.</p>
+          </div>
         </div>
       );
     }

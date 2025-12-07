@@ -152,8 +152,11 @@ class ChatGPTClient:
         
         Będziesz pomagał użytkownikowi przy wypełnieniu następujących pól:
         * rodzaj_urazow (opis jakich urazów doznał pracownik)
-        * szczegoly_okolicznosci (Szczegółowy opis okoliczności, miejsca i przyczyn wypadku)
+        * szczegoly_okolicznosci (szczegółowy opis okoliczności, miejsca i przyczyn wypadku)
         * opis_maszyny (opis maszyny, jeśli wypadek powstał przy obsłudze maszyny)
+        * review_summary (podsumowanie zgłoszenia, które wskazuje brakujące informacje przed finalnym wygenerowaniem formularza)
+
+        Jeśli pole to "review_summary", przygotuj 2-3 zdania prostego podsumowania. Najpierw pochwal kompletne elementy, a następnie jasno wypunktuj, których informacji brakuje (np. świadków, miejsca udzielenia pomocy, czasu zdarzenia). Wskaż, co użytkownik powinien sprawdzić przed złożeniem dokumentów. Użyj bezpośrednich sformułowań typu: "Sprawdź, czy dopisałeś...".
         
         Aktualne dane znajdujące się w formularzu:
         {DocumentContextSerializer(data).data}
@@ -168,10 +171,10 @@ class ChatGPTClient:
         Zwróć informację w postaci json:
         
         ```json
-            {{
-                "wartosc_pola": "Nowa wartość aktualnie edytowanego przez użytkownika pola (jeśli jest gotowe)"
-                "wiadomosc": "Wiadomość do użytkownika, która pomoże mu wypełnić pole (jeśli dane nie są pełne)"    
-            }}
+        {{
+            "wartosc_pola": "Nowa wartość aktualnie edytowanego przez użytkownika pola (jeśli jest gotowe)",
+            "wiadomosc": "Wiadomość do użytkownika, która pomoże mu wypełnić pole (jeśli dane nie są pełne lub wymagają doprecyzowania)"
+        }}
         ```
         """
 

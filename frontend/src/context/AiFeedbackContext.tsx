@@ -52,6 +52,7 @@ type UseAiFeedbackReturn = AiFeedbackState & {
 interface UseAiFeedbackOptions {
 	metadata?: Record<string, unknown>;
 	context?: AiFeedbackContextPayload;
+	debounceMs?: number;
 }
 
 export function useAiFeedback(
@@ -67,12 +68,19 @@ export function useAiFeedback(
 	const { service, debounceMs } = context;
 	const metadata = options?.metadata;
 	const contextPayload = options?.context;
+	const customDebounceMs = options?.debounceMs;
 	const [state, setState] = useState<AiFeedbackState>(IDLE_STATE);
 	const debounceHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const requestIdRef = useRef(0);
 	const latestPayloadRef = useRef({ fieldId, metadata, contextPayload, normalizedText: '' });
 	const previousTextRef = useRef<string | null>(null);
 	const normalizedText = rawText?.trim() ?? '';
+	const effectiveDebounceMs = useMemo(() => {
+		if (typeof customDebounceMs === 'number') {
+			return customDebounceMs;
+		}
+		return debounceMs;
+	}, [customDebounceMs, debounceMs]);
 
 	const clearPendingTimeout = useCallback(() => {
 		if (debounceHandle.current) {
@@ -145,6 +153,16 @@ export function useAiFeedback(
 			};
 		}
 
+		const delay = Math.max(0, effectiveDebounceMs ?? 0);
+		if (delay === 0) {
+			debounceHandle.current = setTimeout(() => {
+				triggerRequest();
+			}, 0);
+			return () => {
+				clearPendingTimeout();
+			};
+		}
+
 		startTransition(() => {
 			setState((prev) => ({
 				status: 'debouncing',
@@ -155,12 +173,12 @@ export function useAiFeedback(
 
 		debounceHandle.current = setTimeout(() => {
 			triggerRequest();
-		}, debounceMs);
+		}, delay);
 
 		return () => {
 			clearPendingTimeout();
 		};
-	}, [normalizedText, debounceMs, triggerRequest, clearPendingTimeout]);
+	}, [normalizedText, triggerRequest, clearPendingTimeout, effectiveDebounceMs]);
 
 	const refresh = () => {
 		clearPendingTimeout();

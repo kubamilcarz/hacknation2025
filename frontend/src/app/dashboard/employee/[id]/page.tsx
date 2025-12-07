@@ -257,7 +257,7 @@ export default function DocumentDetail() {
 
               <section>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Ocena przesłanek</p>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-4 grid gap-6 sm:grid-cols-2">
                   {DOCUMENT_DETAIL_ASSESSMENT_SECTIONS.map((section) => {
                     const entry = documentDetailService.getAssessmentEntry(documentData, section.key);
                     if (!entry) {
