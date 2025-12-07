@@ -5,12 +5,13 @@ import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDocuments } from '@/context/DocumentContext';
 import {
-  documentService,
-  type DocumentListOptions,
-} from '@/lib/services/documentService';
+  employeeDocumentService,
+  formatStatus,
+  type EmployeeDocumentListOptions,
+} from '@/lib/services/employeeDocumentService';
 import Footer from '@/components/Footer';
 import DashboardHeader from '@/components/employee/DashboardHeader';
-import DocumentFiltersPanel, { type BooleanFilterValue } from '@/components/employee/DocumentFiltersPanel';
+import DocumentFiltersPanel, { type StatusFilterValue } from '@/components/employee/DocumentFiltersPanel';
 import EmployeeDocumentsTable, {
   type SortConfig,
   getEmployeeColumnDefaultDirection,
@@ -18,48 +19,35 @@ import EmployeeDocumentsTable, {
   isEmployeeSortableColumn,
 } from '@/components/employee/EmployeeDocumentsTable';
 import ExportDocumentsModal from '@/components/employee/ExportDocumentsModal';
+import ImportDocumentsModal from '@/components/employee/ImportDocumentsModal';
 
 const isSortDirectionValue = (value: string | null): value is 'asc' | 'desc' =>
   value === 'asc' || value === 'desc';
 
 const PAGE_SIZE = 10;
 
-const HELP_PROVIDED_PARAM = 'help';
-const MACHINE_INVOLVED_PARAM = 'machine';
+const STATUS_PARAM = 'status';
 
-const parseFilterParamToState = (value: string | null): BooleanFilterValue => {
-  if (value === 'yes') {
-    return 'yes';
+const parseStatusParamToState = (value: string | null): StatusFilterValue => {
+  if (value === 'processing' || value === 'completed' || value === 'failed') {
+    return value;
   }
-
-  if (value === 'no') {
-    return 'no';
-  }
-
   return 'all';
 };
 
-const filterStateToParam = (value: BooleanFilterValue): string | null => {
-  if (value === 'yes') {
-    return 'yes';
+const statusStateToParam = (value: StatusFilterValue): string | null => {
+  if (value === 'all') {
+    return null;
   }
-
-  if (value === 'no') {
-    return 'no';
-  }
-
-  return null;
+  return value;
 };
 
-const filterParamToBoolean = (value: string | null): boolean | null => {
-  if (value === 'yes') {
-    return true;
+const statusParamToOption = (
+  value: string | null,
+): EmployeeDocumentListOptions['status'] => {
+  if (value === 'processing' || value === 'completed' || value === 'failed') {
+    return value;
   }
-
-  if (value === 'no') {
-    return false;
-  }
-
   return null;
 };
 
@@ -76,6 +64,7 @@ export default function EmployeeDashboard() {
     pageSize: currentPageSize,
     loadDocuments,
     error,
+    downloadOriginalDocument,
   } = documentsContext;
   const totalCount = documentsContext.totalCount;
   const hasLoaded = documentsContext.hasLoaded;
@@ -91,25 +80,35 @@ export default function EmployeeDashboard() {
   const hasDocumentsToExport = totalCount > 0;
   const initialSearchTerm = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
-  const [helpProvidedFilter, setHelpProvidedFilter] = useState<BooleanFilterValue>(
-    parseFilterParamToState(searchParams.get(HELP_PROVIDED_PARAM))
-  );
-  const [machineInvolvedFilter, setMachineInvolvedFilter] = useState<BooleanFilterValue>(
-    parseFilterParamToState(searchParams.get(MACHINE_INVOLVED_PARAM))
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>(
+    parseStatusParamToState(searchParams.get(STATUS_PARAM))
   );
   const searchCommittedValueRef = useRef<string | null>(
     initialSearchTerm.trim().length > 0 ? initialSearchTerm.trim() : null
   );
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleCreateDocument = useCallback(() => {
-    router.push('/dashboard/employee/new');
-  }, [router]);
+  const handleOpenImportModal = useCallback(() => {
+    setIsImportModalOpen(true);
+  }, []);
+
+  const handleCloseImportModal = useCallback(() => {
+    setIsImportModalOpen(false);
+  }, []);
 
   const handleNavigateToDocument = useCallback((documentId: number) => {
     router.push(`/dashboard/employee/${documentId}`);
   }, [router]);
+
+  const handleDownloadDocument = useCallback(async (documentId: number) => {
+    try {
+      await downloadOriginalDocument(documentId);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [downloadOriginalDocument]);
 
   const handleOpenExportModal = useCallback(() => {
     setIsExportModalOpen(true);
@@ -142,7 +141,7 @@ export default function EmployeeDashboard() {
     return getEmployeeDefaultSortConfig();
   });
 
-  const currentQueryOptionsRef = useRef<DocumentListOptions>({ page: 1, pageSize: PAGE_SIZE });
+  const currentQueryOptionsRef = useRef<EmployeeDocumentListOptions>({ page: 1, pageSize: PAGE_SIZE });
   const pendingPageRef = useRef<number | null>(null);
 
   const searchParamsString = searchParams.toString();
@@ -196,8 +195,6 @@ export default function EmployeeDashboard() {
 
     const sortParam = params.get('sort');
     const directionParam = params.get('direction');
-    const helpParam = params.get(HELP_PROVIDED_PARAM);
-    const machineParam = params.get(MACHINE_INVOLVED_PARAM);
     const defaultSort = getEmployeeDefaultSortConfig();
     const hasValidSortParam = sortParam ? isEmployeeSortableColumn(sortParam) : false;
 
@@ -205,23 +202,21 @@ export default function EmployeeDashboard() {
       return;
     }
 
-    const resolvedSort = (hasValidSortParam ? sortParam : defaultSort?.columnId ?? 'data_wypadku') as DocumentListOptions['sort'];
+    const resolvedSort = (hasValidSortParam ? sortParam : defaultSort?.columnId ?? 'uploaded_at') as NonNullable<EmployeeDocumentListOptions['sort']>;
     const resolvedDirection: 'asc' | 'desc' = hasValidSortParam
       ? (isSortDirectionValue(directionParam)
         ? directionParam
-        : getEmployeeColumnDefaultDirection(sortParam as DocumentListOptions['sort']))
+        : getEmployeeColumnDefaultDirection(sortParam as NonNullable<EmployeeDocumentListOptions['sort']>))
       : defaultSort?.direction ?? 'desc';
-    const resolvedHelpProvided = filterParamToBoolean(helpParam);
-    const resolvedMachineInvolved = filterParamToBoolean(machineParam);
+    const resolvedStatus = statusParamToOption(params.get(STATUS_PARAM));
 
-    const nextOptions: DocumentListOptions = {
+    const nextOptions: EmployeeDocumentListOptions = {
       page: normalizedRequestedPage,
       pageSize: currentPageSize,
       search: searchOption,
       sort: resolvedSort,
       direction: resolvedDirection,
-      helpProvided: resolvedHelpProvided,
-      machineInvolved: resolvedMachineInvolved,
+      status: resolvedStatus,
     };
 
     pendingPageRef.current = nextOptions.page ?? 1;
@@ -333,22 +328,11 @@ export default function EmployeeDashboard() {
     [commitSearchTerm]
   );
 
-  const handleHelpProvidedChange = useCallback(
-    (value: BooleanFilterValue) => {
-      setHelpProvidedFilter(value);
+  const handleStatusFilterChange = useCallback(
+    (value: StatusFilterValue) => {
+      setStatusFilter(value);
       commitQueryParams({
-        [HELP_PROVIDED_PARAM]: filterStateToParam(value),
-        page: null,
-      });
-    },
-    [commitQueryParams]
-  );
-
-  const handleMachineInvolvedChange = useCallback(
-    (value: BooleanFilterValue) => {
-      setMachineInvolvedFilter(value);
-      commitQueryParams({
-        [MACHINE_INVOLVED_PARAM]: filterStateToParam(value),
+        [STATUS_PARAM]: statusStateToParam(value),
         page: null,
       });
     },
@@ -360,8 +344,7 @@ export default function EmployeeDashboard() {
     const rawSearchParam = currentParams.get('search');
     const normalizedSearchParam = rawSearchParam?.trim() ?? '';
     const canonicalValue = normalizedSearchParam.length > 0 ? normalizedSearchParam : null;
-    const nextHelpFilter = parseFilterParamToState(currentParams.get(HELP_PROVIDED_PARAM));
-    const nextMachineFilter = parseFilterParamToState(currentParams.get(MACHINE_INVOLVED_PARAM));
+    const nextStatusFilter = parseStatusParamToState(currentParams.get(STATUS_PARAM));
 
     if (rawSearchParam && rawSearchParam !== normalizedSearchParam) {
       searchCommittedValueRef.current = canonicalValue;
@@ -380,8 +363,7 @@ export default function EmployeeDashboard() {
         }
         return normalizedSearchParam;
       });
-      setHelpProvidedFilter((currentValue) => (currentValue === nextHelpFilter ? currentValue : nextHelpFilter));
-      setMachineInvolvedFilter((currentValue) => (currentValue === nextMachineFilter ? currentValue : nextMachineFilter));
+      setStatusFilter((currentValue) => (currentValue === nextStatusFilter ? currentValue : nextStatusFilter));
     });
   }, [commitQueryParams, searchParamsString]);
 
@@ -432,21 +414,17 @@ export default function EmployeeDashboard() {
     const formatCsvField = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
     const header = [
       'ID',
-      'Imię',
-      'Nazwisko',
-      'PESEL',
-      'Data wypadku',
-      'Godzina wypadku',
-      'Miejsce wypadku',
-      'Rodzaj urazów',
-      'Czy udzielono pomocy',
+      'Nazwa pliku',
+      'Data przesłania',
+      'Status analizy',
+      'Opis zdarzenia',
     ];
 
     const baseOptions = currentQueryOptionsRef.current;
     const exportPageSize = Math.max(totalCount, baseOptions.pageSize ?? PAGE_SIZE);
 
     try {
-      const response = await documentService.list({
+      const response = await employeeDocumentService.list({
         ...baseOptions,
         page: 1,
         pageSize: exportPageSize,
@@ -459,14 +437,10 @@ export default function EmployeeDashboard() {
       const rows = dataset
         .map((documentRow) => [
           documentRow.id ?? 'Brak danych',
-          documentRow.imie,
-          documentRow.nazwisko,
-          documentRow.pesel,
-          documentRow.data_wypadku,
-          documentRow.godzina_wypadku,
-          documentRow.miejsce_wypadku,
-          documentRow.rodzaj_urazow,
-          documentRow.czy_udzielona_pomoc ? 'Tak' : 'Nie',
+          documentRow.fileName,
+          formatDate(new Date(documentRow.uploadedAt)),
+          formatStatus(documentRow.analysisStatus),
+          documentRow.incidentDescription,
         ].map(formatCsvField).join(';'));
 
       const csvContent = [header.map(formatCsvField).join(';'), ...rows].join('\n');
@@ -497,7 +471,7 @@ export default function EmployeeDashboard() {
   }, [handleExportCsv, isExporting, totalCount]);
 
   const handleSort = useCallback(
-    (columnId: DocumentListOptions['sort'], direction: 'asc' | 'desc') => {
+    (columnId: NonNullable<EmployeeDocumentListOptions['sort']>, direction: 'asc' | 'desc') => {
       if (sortConfig?.columnId === columnId && sortConfig.direction === direction) {
         return;
       }
@@ -525,7 +499,7 @@ export default function EmployeeDashboard() {
               ]}
               title="Lista dokumentów"
               description="Przegląd przetworzonych dokumentów zgłoszeń ZUS."
-              onCreateDocument={handleCreateDocument}
+              onCreateDocument={handleOpenImportModal}
               onExportClick={handleOpenExportModal}
             />
 
@@ -534,10 +508,8 @@ export default function EmployeeDashboard() {
               onSearchChange={handleSearchInputChange}
               onSearchBlur={handleSearchInputBlur}
               onSearchKeyDown={handleSearchInputKeyDown}
-              helpProvidedValue={helpProvidedFilter}
-              onHelpProvidedChange={handleHelpProvidedChange}
-              machineInvolvedValue={machineInvolvedFilter}
-              onMachineInvolvedChange={handleMachineInvolvedChange}
+              statusValue={statusFilter}
+              onStatusChange={handleStatusFilterChange}
             />
 
             <EmployeeDocumentsTable
@@ -554,6 +526,7 @@ export default function EmployeeDashboard() {
               pageSize={currentPageSize}
               formatDate={formatDate}
               onNavigateToDocument={handleNavigateToDocument}
+              onDownloadDocument={handleDownloadDocument}
             />
           </div>
           <Footer router={router} showPanelButton={false} />
@@ -569,6 +542,7 @@ export default function EmployeeDashboard() {
         recordLabel={recordLabel}
         hasDocumentsToExport={hasDocumentsToExport}
       />
+      <ImportDocumentsModal isOpen={isImportModalOpen} onClose={handleCloseImportModal} />
     </>
   );
 }

@@ -3,25 +3,61 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDocuments } from '@/context/DocumentContext';
-import { documentService } from '@/lib/services/documentService';
-import type { Document } from '@/types/document';
+import {
+  employeeDocumentService,
+  formatFileSize,
+  formatStatus,
+} from '@/lib/services/employeeDocumentService';
+import type { EmployeeDocument } from '@/types/employeeDocument';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 interface DocumentDetailPageProps {
   params: { id: string };
 }
 
+const DESCRIPTION_SOURCE_LABEL: Record<EmployeeDocument['descriptionSource'], string> = {
+  ai: 'Opis wygenerowany przez AI',
+  manual: 'Opis dodany ręcznie',
+};
+
+function getStatusBadgeClasses(status: EmployeeDocument['analysisStatus']) {
+  switch (status) {
+    case 'completed':
+      return 'border-(--color-success) bg-(--color-success-soft) text-(--color-success)';
+    case 'processing':
+      return 'border-(--color-accent) bg-(--color-accent-soft) text-(--color-accent-text)';
+    case 'failed':
+      return 'border-(--color-error) bg-(--color-error-soft) text-(--color-error)';
+    default:
+      return 'border-subtle bg-surface text-secondary';
+  }
+}
+
+function formatUploadDate(iso: string) {
+  if (!iso) {
+    return 'Brak danych';
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return date.toLocaleString('pl-PL', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+}
+
 export default function DocumentDetail({ params }: DocumentDetailPageProps) {
   const router = useRouter();
   const documentId = Number.parseInt(params.id, 10);
-  const { isLoading, getDocumentById } = useDocuments();
+  const { isLoading, getDocumentById, downloadOriginalDocument } = useDocuments();
 
   const documentFromStore = useMemo(
     () => (Number.isNaN(documentId) ? undefined : getDocumentById(documentId)),
     [documentId, getDocumentById],
   );
 
-  const [remoteDocument, setRemoteDocument] = useState<Document | null>(null);
+  const [remoteDocument, setRemoteDocument] = useState<EmployeeDocument | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(
     Number.isNaN(documentId) ? 'Nieprawidłowy identyfikator dokumentu.' : null,
   );
@@ -38,7 +74,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
 
     const fetchDocument = async () => {
       try {
-        const remote = await documentService.getById(documentId);
+        const remote = await employeeDocumentService.getById(documentId);
         if (isCancelled) {
           return;
         }
@@ -67,7 +103,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
     if (documentData) {
       return [
         { href: '/dashboard/employee', labelKey: 'panel' },
-        { label: `Dokument #${documentData.id ?? 'Brak danych'}` },
+        { label: documentData.id != null ? `Dokument #${documentData.id}` : documentData.fileName },
       ];
     }
 
@@ -77,36 +113,27 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
     ];
   }, [documentData]);
 
-  const formatDate = (isoDate: string, fallback?: string) => {
-    if (!isoDate) {
-      return fallback ?? 'Brak danych';
+  const handleDownload = async () => {
+    if (documentData?.id == null) {
+      return;
     }
-    const date = new Date(isoDate);
-    if (Number.isNaN(date.getTime())) {
-      return fallback ?? isoDate;
+
+    try {
+      await downloadOriginalDocument(documentData.id);
+    } catch (err) {
+      console.error(err);
     }
-    return date.toLocaleDateString('pl-PL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
   };
 
-  const formatBoolean = (value: boolean | null | undefined) => (value ? 'Tak' : 'Nie');
-
-  const renderAddress = (
-    ulica?: string | null,
-    nr_domu?: string | null,
-    nr_lokalu?: string | null,
-    kod?: string | null,
-    miejscowosc?: string | null,
-  ) => {
-    const street = [ulica, nr_domu, nr_lokalu].filter(Boolean).join(' ').trim();
-    if (!street && !kod && !miejscowosc) {
-      return 'Brak danych';
-    }
-    return `${street || ''}${street ? ', ' : ''}${kod ?? ''} ${miejscowosc ?? ''}`.trim();
-  };
+  const metadataCards = documentData
+    ? [
+        { label: 'ID dokumentu', value: documentData.id != null ? `#${documentData.id}` : 'Brak danych' },
+        { label: 'Rozmiar pliku', value: formatFileSize(documentData.fileSize) },
+        { label: 'Data przesłania', value: formatUploadDate(documentData.uploadedAt) },
+        { label: 'Status analizy', value: formatStatus(documentData.analysisStatus) },
+        { label: 'Źródło opisu', value: DESCRIPTION_SOURCE_LABEL[documentData.descriptionSource] ?? 'Brak danych' },
+      ]
+    : [];
 
   return (
     <div className="min-h-screen bg-app py-8">
@@ -116,7 +143,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
             <Breadcrumbs items={breadcrumbItems} />
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold text-primary">
-                {documentData ? `Dokument #${documentData.id ?? 'Brak danych'}` : 'Dokument'}
+                {documentData ? documentData.fileName : 'Dokument'}
               </h1>
               <button
                 type="button"
@@ -134,7 +161,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
             </div>
           )}
 
-          {(!documentData && isLoading) && (
+          {!documentData && isLoading && (
             <div className="rounded-lg border border-subtle bg-surface-subdued px-4 py-6 text-sm text-muted">
               Ładowanie dokumentu…
             </div>
@@ -142,138 +169,57 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
 
           {documentData && (
             <div className="space-y-8">
-              <section className="border-b border-subtle pb-6">
-                <h2 className="text-lg font-semibold text-primary">Informacje o poszkodowanym</h2>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <section className="rounded-xl border border-subtle bg-surface-subdued px-6 py-5">
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Imię i nazwisko</p>
-                    <p className="mt-1 text-base font-medium text-primary">{`${documentData.imie} ${documentData.nazwisko}`.trim()}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">PESEL</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.pesel}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Data urodzenia</p>
-                    <p className="mt-1 text-base font-medium text-primary">{formatDate(documentData.data_urodzenia)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Miejsce urodzenia</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.miejsce_urodzenia}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Telefon</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.numer_telefonu ?? 'Brak danych'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Adres zamieszkania</p>
-                    <p className="mt-1 text-base font-medium text-primary">
-                      {renderAddress(documentData.ulica, documentData.nr_domu, documentData.nr_lokalu, documentData.kod_pocztowy, documentData.miejscowosc)}
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Nazwa pliku</p>
+                    <p className="mt-1 text-2xl font-semibold text-primary">{documentData.fileName}</p>
+                    <p className="mt-2 text-sm text-muted">
+                      Przesłano {formatUploadDate(documentData.uploadedAt)}
                     </p>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:items-end">
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(documentData.analysisStatus)}`}
+                    >
+                      {formatStatus(documentData.analysisStatus)}
+                    </span>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                      >
+                        Pobierz PDF
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
 
-              <section className="border-b border-subtle pb-6">
-                <h2 className="text-lg font-semibold text-primary">Informacje o zdarzeniu</h2>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Data i godzina wypadku</p>
-                    <p className="mt-1 text-base font-medium text-primary">
-                      {formatDate(documentData.data_wypadku)} • {documentData.godzina_wypadku}
-                    </p>
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {metadataCards.map((card) => (
+                  <div key={card.label} className="rounded-lg border border-subtle bg-surface px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">{card.label}</p>
+                    <p className="mt-1 text-base font-medium text-primary">{card.value}</p>
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Miejsce wypadku</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.miejsce_wypadku}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Planowany czas pracy</p>
-                    <p className="mt-1 text-base font-medium text-primary">
-                      {documentData.planowana_godzina_rozpoczecia_pracy ?? 'Brak danych'} - {documentData.planowana_godzina_zakonczenia_pracy ?? 'Brak danych'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Organ postępowania</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.organ_postepowania ?? 'Brak informacji'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Rodzaj urazów</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.rodzaj_urazow}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Szczegóły okoliczności</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-secondary">
-                      {documentData.szczegoly_okolicznosci}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Czy udzielono pomocy</p>
-                    <p className="mt-1 text-base font-medium text-primary">{formatBoolean(documentData.czy_udzielona_pomoc)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Miejsce udzielenia pomocy</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.miejsce_udzielenia_pomocy ?? 'Brak danych'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Czy używano maszyn</p>
-                    <p className="mt-1 text-base font-medium text-primary">{formatBoolean(documentData.czy_wypadek_podczas_uzywania_maszyny)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Opis maszyn</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.opis_maszyn ?? 'Brak danych'}</p>
-                  </div>
-                </div>
+                ))}
               </section>
 
-              <section className="border-b border-subtle pb-6">
-                <h2 className="text-lg font-semibold text-primary">Dane zgłaszającego</h2>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <section>
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Imię i nazwisko</p>
-                    <p className="mt-1 text-base font-medium text-primary">
-                      {`${documentData.imie_zglaszajacego ?? ''} ${documentData.nazwisko_zglaszajacego ?? ''}`.trim() || 'Brak danych'}
-                    </p>
+                    <p className="text-xs uppercase tracking-wide text-muted">Opis zdarzenia</p>
+                    <h2 className="text-xl font-semibold text-primary">Podsumowanie analizy</h2>
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">PESEL zgłaszającego</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.pesel_zglaszajacego ?? 'Brak danych'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Telefon zgłaszającego</p>
-                    <p className="mt-1 text-base font-medium text-primary">{documentData.nr_telefonu_zglaszajacego ?? 'Brak danych'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Adres zgłaszającego</p>
-                    <p className="mt-1 text-base font-medium text-primary">
-                      {renderAddress(
-                        documentData.ulica_zglaszajacego,
-                        documentData.nr_domu_zglaszajacego,
-                        documentData.nr_lokalu_zglaszajacego,
-                        documentData.kod_pocztowy_zglaszajacego,
-                        documentData.miejscowosc_zglaszajacego,
-                      )}
-                    </p>
-                  </div>
+                  <span className="text-xs font-medium text-muted">
+                    {DESCRIPTION_SOURCE_LABEL[documentData.descriptionSource] ?? 'Brak informacji'}
+                  </span>
+                </div>
+                <div className="mt-4 rounded-xl border border-subtle bg-surface-subdued px-5 py-4 text-sm leading-relaxed text-primary">
+                  {documentData.incidentDescription || 'Brak szczegółowego opisu zdarzenia.'}
                 </div>
               </section>
-
-              {documentData.witnesses && documentData.witnesses.length > 0 && (
-                <section className="border-b border-subtle pb-6">
-                  <h2 className="text-lg font-semibold text-primary">Świadkowie</h2>
-                  <div className="mt-4 space-y-3">
-                    {documentData.witnesses.map((witness, index) => (
-                      <div key={`${documentData.id}-witness-${index}`} className="rounded border border-subtle bg-surface px-4 py-3">
-                        <p className="text-base font-semibold text-primary">{`${witness.imie} ${witness.nazwisko}`}</p>
-                        <p className="text-sm text-secondary">
-                          {[witness.ulica, witness.nr_domu, witness.nr_lokalu].filter(Boolean).join(' ')},{' '}
-                          {witness.kod_pocztowy} {witness.miejscowosc}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
             </div>
           )}
         </div>

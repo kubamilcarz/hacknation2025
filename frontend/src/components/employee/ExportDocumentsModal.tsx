@@ -3,12 +3,12 @@
 import { useMemo, useState } from "react";
 import Modal from "@/components/Modal";
 import {
-  documentService,
-  type DocumentExportFormat,
-} from "@/lib/services/documentService";
+  employeeDocumentService,
+  type EmployeeDocumentExportFormat,
+} from "@/lib/services/employeeDocumentService";
 
 const FORMAT_OPTIONS: Array<{
-  value: DocumentExportFormat;
+  value: EmployeeDocumentExportFormat;
   label: string;
   helper: string;
 }> = [
@@ -53,7 +53,7 @@ export default function ExportDocumentsModal({
   recordLabel,
   hasDocumentsToExport,
 }: ExportDocumentsModalProps) {
-  const [selectedFormat, setSelectedFormat] = useState<DocumentExportFormat>("csv");
+  const [selectedFormat, setSelectedFormat] = useState<EmployeeDocumentExportFormat>("csv");
 
   const confirmLabel = useMemo(() => {
     switch (selectedFormat) {
@@ -69,7 +69,7 @@ export default function ExportDocumentsModal({
   }, [selectedFormat]);
 
   const handleConfirm = () => {
-    documentService.setExportFormat(selectedFormat);
+    employeeDocumentService.setExportFormat(selectedFormat);
     onConfirm();
     setSelectedFormat("csv");
   };

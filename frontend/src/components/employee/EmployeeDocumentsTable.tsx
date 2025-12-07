@@ -3,17 +3,39 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Pagination } from "@/components/Pagination";
 import { Spinner } from "@/components/Spinner";
-import type { Document } from "@/types/document";
-import type { DocumentListOptions } from "@/lib/services/documentService";
+import { formatFileSize, formatStatus } from "@/lib/services/employeeDocumentService";
+import type { EmployeeDocument } from "@/types/employeeDocument";
+import type { EmployeeDocumentListOptions } from "@/lib/services/employeeDocumentService";
 
 const MIN_COLUMN_WIDTH = 140;
-const TEXT_COLUMN_IDS = new Set(["id", "nazwisko", "pesel", "miejsce_wypadku", "rodzaj_urazow"]);
+const TEXT_COLUMN_IDS = new Set(["file_name", "incident_description"]);
+const DESCRIPTION_SOURCE_LABEL: Record<EmployeeDocument["descriptionSource"], string> = {
+  ai: "Opis AI",
+  manual: "Opis ręczny",
+};
+
+function getStatusBadgeClasses(status: EmployeeDocument["analysisStatus"]) {
+  switch (status) {
+    case "completed":
+      return "border-(--color-success) bg-(--color-success-soft) text-(--color-success)";
+    case "processing":
+      return "border-(--color-accent) bg-(--color-accent-soft) text-(--color-accent-text)";
+    case "failed":
+      return "border-(--color-error) bg-(--color-error-soft) text-(--color-error)";
+    default:
+      return "border-subtle bg-surface text-secondary";
+  }
+}
+
+function formatDescriptionSource(source: EmployeeDocument["descriptionSource"]) {
+  return DESCRIPTION_SOURCE_LABEL[source] ?? "Opis";
+}
 
 type ColumnDefinition = {
   id: string;
   label: string;
   minWidth?: number;
-  render: (document: Document) => ReactNode;
+  render: (document: EmployeeDocument) => ReactNode;
   cellClassName?: string;
   align?: "left" | "right";
   sortable?: boolean;
@@ -23,19 +45,16 @@ type ColumnDefinition = {
   width?: number;
 };
 
-export type SortConfig = { columnId: DocumentListOptions["sort"]; direction: "asc" | "desc" } | null;
+export type SortConfig = { columnId: NonNullable<EmployeeDocumentListOptions["sort"]>; direction: "asc" | "desc" } | null;
 
 export const EMPLOYEE_SORTABLE_COLUMNS: Array<{
-  id: DocumentListOptions["sort"];
+  id: NonNullable<EmployeeDocumentListOptions["sort"]>;
   label: string;
   defaultDirection: "asc" | "desc";
 }> = [
-  { id: "data_wypadku", label: "Data wypadku", defaultDirection: "desc" },
-  { id: "id", label: "ID", defaultDirection: "asc" },
-  { id: "imie", label: "Imię", defaultDirection: "asc" },
-  { id: "nazwisko", label: "Nazwisko", defaultDirection: "asc" },
-  { id: "pesel", label: "PESEL", defaultDirection: "asc" },
-  { id: "miejsce_wypadku", label: "Miejsce wypadku", defaultDirection: "asc" },
+  { id: "uploaded_at", label: "Data przesłania", defaultDirection: "desc" },
+  { id: "file_name", label: "Nazwa pliku", defaultDirection: "asc" },
+  { id: "analysis_status", label: "Status analizy", defaultDirection: "asc" },
 ];
 
 const SORTABLE_COLUMNS = EMPLOYEE_SORTABLE_COLUMNS.map(({ id, defaultDirection }) => ({ id, defaultDirection }));
@@ -56,28 +75,29 @@ export function getEmployeeDefaultSortConfig(): SortConfig {
   return { columnId: defaultColumn.id, direction: defaultColumn.defaultDirection };
 }
 
-export function isEmployeeSortableColumn(columnId: string | null): columnId is DocumentListOptions["sort"] {
+export function isEmployeeSortableColumn(columnId: string | null): columnId is NonNullable<EmployeeDocumentListOptions["sort"]> {
   return Boolean(columnId && SORTABLE_COLUMN_MAP[columnId]);
 }
 
-export function getEmployeeColumnDefaultDirection(columnId: DocumentListOptions["sort"]): "asc" | "desc" {
+export function getEmployeeColumnDefaultDirection(columnId: NonNullable<EmployeeDocumentListOptions["sort"]>): "asc" | "desc" {
   return SORTABLE_COLUMN_MAP[columnId]?.defaultDirection ?? "asc";
 }
 
 type EmployeeDocumentsTableProps = {
-  documents: Document[];
+  documents: EmployeeDocument[];
   totalCount: number;
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
   sortConfig: SortConfig;
-  onSortChange: (columnId: DocumentListOptions["sort"], direction: "asc" | "desc") => void;
+  onSortChange: (columnId: NonNullable<EmployeeDocumentListOptions["sort"]>, direction: "asc" | "desc") => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   pageSize: number;
   formatDate: (input: Date) => string;
   onNavigateToDocument: (documentId: number) => void;
+  onDownloadDocument: (documentId: number) => void;
 };
 
 export default function EmployeeDocumentsTable({
@@ -94,17 +114,17 @@ export default function EmployeeDocumentsTable({
   pageSize,
   formatDate,
   onNavigateToDocument,
+  onDownloadDocument,
 }: EmployeeDocumentsTableProps) {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
     ({
       detailsToggle: 48,
-      id: 100,
-      nazwisko: 220,
-      pesel: 160,
-      miejsce_wypadku: 220,
-      rodzaj_urazow: 220,
-      data_wypadku: 160,
-      actions: 124,
+      file_name: 260,
+      uploaded_at: 180,
+      file_size: 140,
+      analysis_status: 180,
+      incident_description: 360,
+      actions: 160,
     }) satisfies Record<string, number>
   );
   const [isResizing, setIsResizing] = useState(false);
@@ -131,7 +151,7 @@ export default function EmployeeDocumentsTable({
         align: "center",
         resizable: false,
         render: (documentRow) => {
-          const key = String(documentRow.id ?? documentRow.pesel);
+          const key = String(documentRow.id ?? documentRow.fileName);
           const isExpanded = expandedRows[key] ?? false;
           return (
             <button
@@ -147,87 +167,106 @@ export default function EmployeeDocumentsTable({
         },
       },
       {
-        id: "id",
-        label: "ID",
-        minWidth: 100,
-        cellClassName: "font-semibold text-secondary",
-        render: (documentRow) => <span className="block truncate">{documentRow.id ?? "Brak danych"}</span>,
+        id: "file_name",
+        label: "Dokument",
+        minWidth: 260,
+        cellClassName: "text-primary",
+        render: (documentRow) => (
+          <div className="flex flex-col">
+            <span className="block truncate text-sm font-semibold text-primary">{documentRow.fileName}</span>
+            <span className="mt-1 text-xs text-muted">{formatDescriptionSource(documentRow.descriptionSource)}</span>
+          </div>
+        ),
         sortable: true,
         defaultSortDirection: "asc",
         sticky: "left",
       },
       {
-        id: "nazwisko",
-        label: "Poszkodowany",
-        minWidth: 220,
-        cellClassName: "text-primary",
-        render: (documentRow) => <span className="block truncate">{`${documentRow.imie} ${documentRow.nazwisko}`.trim()}</span>,
-        sortable: true,
-        defaultSortDirection: "asc",
-      },
-      {
-        id: "pesel",
-        label: "PESEL",
-        minWidth: 160,
-        render: (documentRow) => <span className="block truncate">{documentRow.pesel}</span>,
-        sortable: true,
-        defaultSortDirection: "asc",
-      },
-      {
-        id: "miejsce_wypadku",
-        label: "Miejsce wypadku",
-        minWidth: 220,
+        id: "uploaded_at",
+        label: "Data przesłania",
+        minWidth: 190,
         cellClassName: "text-secondary",
-        render: (documentRow) => <span className="block truncate">{documentRow.miejsce_wypadku}</span>,
-        sortable: true,
-        defaultSortDirection: "asc",
-      },
-      {
-        id: "rodzaj_urazow",
-        label: "Rodzaj urazu",
-        minWidth: 220,
-        cellClassName: "text-secondary",
-        render: (documentRow) => <span className="block truncate">{documentRow.rodzaj_urazow}</span>,
-      },
-      {
-        id: "data_wypadku",
-        label: "Data wypadku",
-        minWidth: 160,
-        cellClassName: "text-secondary",
-        render: (documentRow) =>
-          formatDate(new Date(`${documentRow.data_wypadku}T${documentRow.godzina_wypadku || "00:00"}`)),
+        render: (documentRow) => formatDate(new Date(documentRow.uploadedAt)),
         sortable: true,
         defaultSortDirection: "desc",
       },
       {
+        id: "file_size",
+        label: "Rozmiar",
+        minWidth: 140,
+        align: "right",
+        render: (documentRow) => <span className="block font-medium text-secondary">{formatFileSize(documentRow.fileSize)}</span>,
+      },
+      {
+        id: "analysis_status",
+        label: "Status analizy",
+        minWidth: 180,
+        sortable: true,
+        defaultSortDirection: "asc",
+        render: (documentRow) => (
+          <span className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(documentRow.analysisStatus)}`}>
+            {formatStatus(documentRow.analysisStatus)}
+          </span>
+        ),
+      },
+      {
+        id: "incident_description",
+        label: "Opis zdarzenia",
+        minWidth: 360,
+        cellClassName: "text-secondary",
+        render: (documentRow) => (
+          <span className="block truncate" title={documentRow.incidentDescription}>
+            {documentRow.incidentDescription || "Brak danych"}
+          </span>
+        ),
+      },
+      {
         id: "actions",
         label: "Akcje",
-        minWidth: 124,
-        width: 124,
+        minWidth: 160,
+        width: 160,
         sticky: "right",
         align: "right",
         resizable: false,
         render: (documentRow) => (
-          <button
-            type="button"
-            onClick={() => {
-              if (documentRow.id != null) {
-                onNavigateToDocument(documentRow.id);
-              }
-            }}
-            disabled={documentRow.id == null}
-            className={`inline-flex items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${
-              documentRow.id == null
-                ? 'cursor-not-allowed border-(--color-border) text-muted'
-                : 'border-subtle text-secondary hover:border-(--color-border-stronger) hover:text-foreground'
-            }`}
-          >
-            Szczegóły
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (documentRow.id != null) {
+                  void onDownloadDocument(documentRow.id);
+                }
+              }}
+              disabled={documentRow.id == null}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${
+                documentRow.id == null
+                  ? "cursor-not-allowed border-(--color-border) text-muted"
+                  : "border-subtle text-secondary hover:border-(--color-border-stronger) hover:text-foreground"
+              }`}
+            >
+              Pobierz PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (documentRow.id != null) {
+                  onNavigateToDocument(documentRow.id);
+                }
+              }}
+              disabled={documentRow.id == null}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 ${
+                documentRow.id == null
+                  ? "cursor-not-allowed border-(--color-border) text-muted"
+                  : "border-subtle text-secondary hover:border-(--color-border-stronger) hover:text-foreground"
+              }`}
+            >
+              Otwórz szczegóły
+            </button>
+          </div>
         ),
       },
     ],
-    [expandedRows, formatDate, onNavigateToDocument, toggleRowExpansion]
+    [expandedRows, formatDate, onDownloadDocument, onNavigateToDocument, toggleRowExpansion]
   );
 
   useEffect(() => {
@@ -252,89 +291,40 @@ export default function EmployeeDocumentsTable({
     return undefined;
   }, [isResizing]);
 
-  const formatDetailLabel = useCallback((key: string) => {
-    return key
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (character) => character.toUpperCase());
-  }, []);
-
-  const formatDetailValue = useCallback((value: unknown) => {
-    if (value === null || value === undefined || value === "") {
-      return "Brak danych";
-    }
-
-    if (value instanceof Date) {
-      return formatDate(value);
-    }
-
-    if (typeof value === "boolean") {
-      return value ? "Tak" : "Nie";
-    }
-
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        return "Brak danych";
-      }
-
-      return value
-        .map((entry) => (typeof entry === "object" ? JSON.stringify(entry, null, 2) : String(entry)))
-        .join("\n");
-    }
-
-    if (typeof value === "object") {
-      return JSON.stringify(value, null, 2);
-    }
-
-    return String(value);
-  }, [formatDate]);
-
   const renderDetailsRow = useCallback(
-    (documentRow: Document) => {
-      const documentKey = String(documentRow.id ?? documentRow.pesel);
-      const entries = Object.entries(documentRow)
-        .filter(([key]) => key !== "witnesses")
-        .map(([key, value]) => ({
-          key,
-          label: formatDetailLabel(key),
-          value: formatDetailValue(value),
-        }));
-
-      const witnesses = documentRow.witnesses ?? [];
+    (documentRow: EmployeeDocument) => {
+      const documentKey = String(documentRow.id ?? documentRow.fileName);
+      const metadata = [
+        { key: "documentId", label: "ID", value: documentRow.id != null ? `#${documentRow.id}` : "Brak danych" },
+        { key: "fileName", label: "Nazwa pliku", value: documentRow.fileName },
+        { key: "uploadedAt", label: "Data przesłania", value: formatDate(new Date(documentRow.uploadedAt)) },
+        { key: "fileSize", label: "Rozmiar", value: formatFileSize(documentRow.fileSize) },
+        { key: "analysisStatus", label: "Status analizy", value: formatStatus(documentRow.analysisStatus) },
+        { key: "source", label: "Źródło opisu", value: formatDescriptionSource(documentRow.descriptionSource) },
+      ];
 
       return (
         <tr className="bg-surface-subdued">
           <td colSpan={columns.length} className="px-6 py-5 text-sm text-secondary">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {entries.map((entry) => (
+              {metadata.map((entry) => (
                 <div key={`${documentKey}-${entry.key}`} className="rounded border border-subtle bg-surface px-3 py-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted">{entry.label}</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-primary">{entry.value}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-primary">{entry.value || "Brak danych"}</p>
                 </div>
               ))}
             </div>
-            {witnesses.length > 0 && (
-              <div className="mt-6 rounded border border-dashed border-subtle px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Świadkowie</p>
-                <ul className="mt-3 space-y-2 text-sm text-primary">
-                  {witnesses.map((witness, index) => (
-                    <li key={`${documentKey}-witness-${index}`} className="rounded bg-surface-subdued px-3 py-2">
-                      <span className="font-semibold text-secondary">{`${witness.imie} ${witness.nazwisko}`}</span>
-                      <br />
-                      <span className="text-xs text-muted">
-                        {[witness.ulica, witness.nr_domu, witness.nr_lokalu].filter(Boolean).join(" ")},{" "}
-                        {witness.kod_pocztowy} {witness.miejscowosc}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="mt-6 rounded-lg border border-dashed border-subtle bg-surface px-4 py-3 text-left">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Pełny opis zdarzenia</p>
+              <p className="mt-2 whitespace-pre-wrap text-base text-primary">
+                {documentRow.incidentDescription || "Brak szczegółowego opisu."}
+              </p>
+            </div>
           </td>
         </tr>
       );
     },
-    [columns.length, formatDetailLabel, formatDetailValue]
+    [columns.length, formatDate]
   );
 
   const getColumnWidth = useCallback(
@@ -422,7 +412,7 @@ export default function EmployeeDocumentsTable({
         return;
       }
 
-      const columnId = column.id as DocumentListOptions["sort"];
+      const columnId = column.id as NonNullable<EmployeeDocumentListOptions["sort"]>;
       const defaultDirection = column.defaultSortDirection ?? "asc";
       const isSameColumn = sortConfig?.columnId === columnId;
       const nextDirection = isSameColumn
@@ -582,7 +572,7 @@ export default function EmployeeDocumentsTable({
             </thead>
             <tbody className="divide-y divide-subtle bg-surface">
               {documents.map((documentRow) => {
-                const documentKey = String(documentRow.id ?? documentRow.pesel);
+                const documentKey = String(documentRow.id ?? documentRow.fileName);
                 const isExpanded = expandedRows[documentKey] ?? false;
                 return (
                   <Fragment key={documentKey}>
@@ -598,7 +588,7 @@ export default function EmployeeDocumentsTable({
                         const isTextColumn = TEXT_COLUMN_IDS.has(column.id);
                         const alignmentClass = column.align === "right" ? "text-right" : "text-left";
                         const fallbackVisibilityClass =
-                          isFallbackState && column.id !== "id" && column.id !== "actions"
+                          isFallbackState && column.id !== "file_name" && column.id !== "actions"
                             ? "hidden sm:table-cell"
                             : "";
                         const cellStyle: CSSProperties = {

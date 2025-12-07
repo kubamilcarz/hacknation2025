@@ -10,16 +10,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { documentService } from "@/lib/services/documentService";
-import type {
-  DocumentListOptions,
-  DocumentListResponse,
-} from "@/lib/services/documentService";
-import type { CreateDocumentInput } from "@/lib/services/documentService";
-import type { Document } from "@/types/document";
+import {
+  employeeDocumentService,
+  type EmployeeDocumentListOptions,
+  type EmployeeDocumentListResponse,
+} from "@/lib/services/employeeDocumentService";
+import type { EmployeeDocument } from "@/types/employeeDocument";
 
 interface DocumentContextValue {
-  documents: Document[];
+  documents: EmployeeDocument[];
   totalCount: number;
   totalPages: number;
   page: number;
@@ -27,28 +26,28 @@ interface DocumentContextValue {
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
-  loadDocuments: (options?: DocumentListOptions) => Promise<DocumentListResponse | null>;
+  loadDocuments: (options?: EmployeeDocumentListOptions) => Promise<EmployeeDocumentListResponse | null>;
   refresh: () => Promise<void>;
-  createDocument: (payload: CreateDocumentInput) => Promise<Document>;
-  downloadDocumentFile: (id: number, format: "docx" | "pdf") => Promise<void>;
-  getDocumentById: (id: number) => Document | undefined;
+  uploadDocument: (file: File) => Promise<EmployeeDocument>;
+  downloadOriginalDocument: (id: number) => Promise<void>;
+  getDocumentById: (id: number) => EmployeeDocument | undefined;
 }
 
 const DocumentContext = createContext<DocumentContextValue | null>(null);
 
 export function DocumentProvider({ children }: { children: ReactNode }) {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const lastOptionsRef = useRef<DocumentListOptions | undefined>(undefined);
+  const lastOptionsRef = useRef<EmployeeDocumentListOptions | undefined>(undefined);
   const activeRequestIdRef = useRef(0);
   const [hasLoaded, setHasLoaded] = useState(false);
 
-  const loadDocuments = useCallback(async (options?: DocumentListOptions) => {
+  const loadDocuments = useCallback(async (options?: EmployeeDocumentListOptions) => {
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
@@ -58,10 +57,10 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       pageSize,
       ...lastOptionsRef.current,
       ...options,
-    } satisfies DocumentListOptions;
+    } satisfies EmployeeDocumentListOptions;
 
     try {
-      const response = await documentService.list(mergedOptions);
+      const response = await employeeDocumentService.list(mergedOptions);
       if (activeRequestIdRef.current !== requestId) {
         return null;
       }
@@ -70,7 +69,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         ...mergedOptions,
         page: response.page,
         pageSize: response.pageSize,
-      } satisfies DocumentListOptions;
+      } satisfies EmployeeDocumentListOptions;
       setDocuments(response.items);
       setTotalCount(response.totalCount);
       setTotalPages(response.totalPages);
@@ -102,19 +101,19 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     void loadDocuments();
   }, [loadDocuments]);
 
-  const createDocument = useCallback(async (payload: CreateDocumentInput) => {
+  const uploadDocument = useCallback(async (file: File) => {
     try {
-      const created = await documentService.create(payload);
+      const created = await employeeDocumentService.upload(file);
       await loadDocuments({ page: 1 });
       return created;
     } catch (err) {
       console.error(err);
-      throw new Error("Nie udało się utworzyć dokumentu.");
+      throw new Error("Nie udało się wgrać dokumentu.");
     }
   }, [loadDocuments]);
 
-  const downloadDocumentFile = useCallback(async (id: number, format: "docx" | "pdf") => {
-    await documentService.downloadAttachment(id, format);
+  const downloadOriginalDocument = useCallback(async (id: number) => {
+    await employeeDocumentService.downloadOriginal(id);
   }, []);
 
   const getDocumentById = useCallback(
@@ -136,8 +135,8 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       refresh: async () => {
         await loadDocuments();
       },
-      createDocument,
-      downloadDocumentFile,
+      uploadDocument,
+      downloadOriginalDocument,
       getDocumentById,
     }),
     [
@@ -150,8 +149,8 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       hasLoaded,
       error,
       loadDocuments,
-      createDocument,
-      downloadDocumentFile,
+      uploadDocument,
+      downloadOriginalDocument,
       getDocumentById,
     ]
   );
