@@ -108,5 +108,3 @@ class Witness(models.Model):
     kod_pocztowy = models.CharField(max_length=6)
     nazwa_panstwa = models.CharField(max_length=255, null=True, blank=True)
     document = models.ForeignKey(Document, on_delete=models.CASCADE)
-
-
