@@ -248,13 +248,13 @@ class ChatGPTClient:
 
         ```json
         {{
-        "ocena_przeslanek": {
-            "naglosc": {"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."},
-            "przyczyna_zewnetrzna": {"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."},
-            "uraz": {"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."},
-            "zwiazek_z_praca": {"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."}
-        },
-        "kompletnosc_wniosku": {
+        "ocena_przeslanek": {{
+            "naglosc": {{"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."}},
+            "przyczyna_zewnetrzna": {{"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."}},
+            "uraz": {{"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."}},
+            "zwiazek_z_praca": {{"status": "true/false", "uzasadnienie": "Krótki opis, czy przesłanka jest spełniona na podstawie danych, czy wymaga weryfikacji/doprecyzowania."}}
+        }},
+        "kompletnosc_wniosku": {{
             "wynik_calkowity": 0,
             "poziom_kompletnosci": "niski/sredni/wysoki",
             "braki": [
@@ -263,7 +263,7 @@ class ChatGPTClient:
             "elementy_do_weryfikacji": [
                 "Wypunktuj elementy, które mają wynik 1 lub wymagają dodatkowych dokumentów (zgodnie z sekcją Wątpliwości merytoryczne)."
             ]
-        },
+        }},
         "rekomendacje_poprawy": [
             "Wskaż, jaką dokumentację należy pozyskać lub jaką opinię należy wystąpić (np. Opinia Głównego Lekarza Orzecznika ZUS). Zgodnie z zasadami z sekcji 'Wątpliwości merytoryczne'."
         ],
