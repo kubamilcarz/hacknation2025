@@ -2,6 +2,7 @@ import { defaultDocumentData, mockDocuments } from "../mock-documents";
 import type { CreateDocumentDto, DocumentDetailDto, DocumentListResponseDto } from "@/lib/dtos/documentDtos";
 import { mapDocumentDetailDtoToDocument, mapDocumentListItemDtoToDocument, mapDocumentToDetailDto, mapPartialDocumentToCreateDto } from "@/lib/mappers/documentMapper";
 import type { Document } from "@/types/document";
+import type { jsPDF } from "jspdf";
 
 export type DocumentExportFormat = "csv" | "excel" | "json" | "pdf";
 
@@ -65,7 +66,7 @@ function normalizeCellValue(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-async function ensurePdfFont(doc: any) {
+async function ensurePdfFont(doc: jsPDF) {
   if (typeof window === "undefined") {
     return;
   }

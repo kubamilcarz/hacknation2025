@@ -79,13 +79,30 @@ const STEPS: IncidentWizardStep[] = [
   },
 ];
 
-const INCIDENT_FIELD_KEYS = ['pesel', 'nr_dowodu', 'imie', 'nazwisko', 'numer_telefonu', 'ulica', 'szczegoly_okolicznosci'] as const;
+const INCIDENT_FIELD_KEYS = [
+  'pesel',
+  'nr_dowodu',
+  'imie',
+  'nazwisko',
+  'numer_telefonu',
+  'ulica',
+  'data_wypadku',
+  'godzina_wypadku',
+  'miejsce_wypadku',
+  'planowana_godzina_rozpoczecia_pracy',
+  'planowana_godzina_zakonczenia_pracy',
+  'rodzaj_urazow',
+  'szczegoly_okolicznosci',
+  'miejsce_udzielenia_pomocy',
+  'organ_postepowania',
+  'opis_maszyn',
+] as const;
 type IncidentFieldKey = (typeof INCIDENT_FIELD_KEYS)[number];
 
 const STEP_FIELDS_BY_STEP: Record<IncidentWizardStep['id'], IncidentFieldKey[]> = {
   identity: ['pesel', 'nr_dowodu', 'imie', 'nazwisko', 'numer_telefonu'],
   residence: ['ulica'],
-  accident: ['szczegoly_okolicznosci'],
+  accident: ['data_wypadku', 'godzina_wypadku', 'miejsce_wypadku', 'rodzaj_urazow', 'szczegoly_okolicznosci'],
   witnesses: [],
   review: [],
 };
@@ -160,6 +177,66 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
     }
     return null;
   },
+  data_wypadku: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      return 'Wybierz datę wypadku w formacie RRRR-MM-DD.';
+    }
+    return null;
+  },
+  godzina_wypadku: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (!/^\d{2}:\d{2}$/.test(normalized)) {
+      return 'Podaj godzinę wypadku w formacie HH:MM.';
+    }
+    return null;
+  },
+  miejsce_wypadku: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (normalized.length < 5) {
+      return 'Opisz miejsce zdarzenia w kilku słowach (minimum 5 znaków).';
+    }
+    return null;
+  },
+  planowana_godzina_rozpoczecia_pracy: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (!/^\d{2}:\d{2}$/.test(normalized)) {
+      return 'Użyj formatu HH:MM (np. 07:00).';
+    }
+    return null;
+  },
+  planowana_godzina_zakonczenia_pracy: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (!/^\d{2}:\d{2}$/.test(normalized)) {
+      return 'Użyj formatu HH:MM (np. 15:30).';
+    }
+    return null;
+  },
+  rodzaj_urazow: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return REQUIRED_FIELD_MESSAGE;
+    }
+    if (normalized.length < 5) {
+      return 'Wymień urazy w kilku słowach (minimum 5 znaków).';
+    }
+    return null;
+  },
   szczegoly_okolicznosci: (value) => {
     const normalized = value.trim();
     if (!normalized) {
@@ -167,6 +244,36 @@ const FIELD_VALIDATORS: Record<IncidentFieldKey, (value: string) => string | nul
     }
     if (normalized.length < 20) {
       return 'Opisz zdarzenie w kilku zdaniach (co najmniej 20 znaków).';
+    }
+    return null;
+  },
+  miejsce_udzielenia_pomocy: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized.length < 3) {
+      return 'Podaj nazwę lub adres miejsca, w którym udzielono pomocy.';
+    }
+    return null;
+  },
+  organ_postepowania: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized.length < 3) {
+      return 'Wpisz nazwę instytucji prowadzącej postępowanie (minimum 3 znaki).';
+    }
+    return null;
+  },
+  opis_maszyn: (value) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized.length < 3) {
+      return 'Podaj nazwę lub typ urządzenia w kilku słowach (minimum 3 znaki).';
     }
     return null;
   },
@@ -188,13 +295,27 @@ const createInitialIncidentDraft = (): CreateDocumentInput => ({
   nazwisko: '',
   numer_telefonu: '',
   ulica: '',
+  data_wypadku: '',
+  godzina_wypadku: '',
+  miejsce_wypadku: '',
+  planowana_godzina_rozpoczecia_pracy: '',
+  planowana_godzina_zakonczenia_pracy: '',
+  rodzaj_urazow: '',
   szczegoly_okolicznosci: '',
+  czy_udzielona_pomoc: false,
+  miejsce_udzielenia_pomocy: '',
+  organ_postepowania: '',
+  czy_wypadek_podczas_uzywania_maszyny: false,
+  opis_maszyn: '',
+  czy_maszyna_posiada_atest: null,
+  czy_maszyna_w_ewidencji: null,
   witnesses: [],
 });
 
 type InputChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEvent<HTMLInputElement>) => void;
 type TextareaChangeHandler = (field: keyof CreateDocumentInput) => (event: ChangeEvent<HTMLTextAreaElement>) => void;
 type WitnessInputChangeHandler = (index: number, field: WitnessEditableField) => (event: ChangeEvent<HTMLInputElement>) => void;
+type BooleanValueChangeHandler = (field: keyof CreateDocumentInput) => (value: boolean | null) => void;
 
 type UploadedAttachment = {
   id: string;
@@ -231,6 +352,7 @@ type IncidentReportContextValue = {
   handleStepSelect: (stepId: IncidentWizardStep['id']) => void;
   handleInputChange: InputChangeHandler;
   handleTextareaChange: TextareaChangeHandler;
+  handleBooleanChange: BooleanValueChangeHandler;
   handleAddWitness: () => void;
   handleRemoveWitness: (index: number) => void;
   handleToggleWitnessEdit: (index: number) => void;
@@ -275,7 +397,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [preparedDocument, setPreparedDocument] = useState<Document | null>(null);
 
   const currentStep = STEPS[currentStepIndex] ?? STEPS[0];
-  const witnesses = incidentDraft.witnesses ?? [];
+  const witnesses = useMemo(() => incidentDraft.witnesses ?? [], [incidentDraft.witnesses]);
 
   const fieldValueLookup: Record<IncidentFieldKey, string> = useMemo(() => ({
     pesel: incidentDraft.pesel ?? '',
@@ -284,7 +406,16 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     nazwisko: incidentDraft.nazwisko ?? '',
     numer_telefonu: incidentDraft.numer_telefonu ?? '',
     ulica: incidentDraft.ulica ?? '',
+    data_wypadku: incidentDraft.data_wypadku ?? '',
+    godzina_wypadku: incidentDraft.godzina_wypadku ?? '',
+    miejsce_wypadku: incidentDraft.miejsce_wypadku ?? '',
+    planowana_godzina_rozpoczecia_pracy: incidentDraft.planowana_godzina_rozpoczecia_pracy ?? '',
+    planowana_godzina_zakonczenia_pracy: incidentDraft.planowana_godzina_zakonczenia_pracy ?? '',
+    rodzaj_urazow: incidentDraft.rodzaj_urazow ?? '',
     szczegoly_okolicznosci: incidentDraft.szczegoly_okolicznosci ?? '',
+    miejsce_udzielenia_pomocy: incidentDraft.miejsce_udzielenia_pomocy ?? '',
+    organ_postepowania: incidentDraft.organ_postepowania ?? '',
+    opis_maszyn: incidentDraft.opis_maszyn ?? '',
   }), [incidentDraft]);
 
   const applyValidationResult = useCallback((fieldName: string, errorMessage: string | null) => {
@@ -375,6 +506,10 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
 
   const handleTextareaChange: TextareaChangeHandler = useCallback((field) => (event) => {
     updateDraftField(field)(event.target.value as CreateDocumentInput[typeof field]);
+  }, [updateDraftField]);
+
+  const handleBooleanChange: BooleanValueChangeHandler = useCallback((field) => (value) => {
+    updateDraftField(field)(value as CreateDocumentInput[typeof field]);
   }, [updateDraftField]);
 
   const setWitnessFieldValue = useCallback((index: number, field: WitnessEditableField, nextValue: string) => {
@@ -753,6 +888,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     handleStepSelect,
     handleInputChange,
     handleTextareaChange,
+    handleBooleanChange,
     handleAddWitness,
     handleRemoveWitness,
     handleToggleWitnessEdit,
