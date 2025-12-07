@@ -348,7 +348,7 @@ const incidentFieldKeySet = new Set<IncidentFieldKey>(INCIDENT_FIELD_KEYS);
 const isIncidentFieldKey = (field: keyof CreateDocumentInput): field is IncidentFieldKey =>
   incidentFieldKeySet.has(field as IncidentFieldKey);
 
-const letUserProceedWithEmptyFields = true;
+const letUserProceedWithEmptyFields = false;
 
 const createInitialIncidentDraft = (): CreateDocumentInput => ({
   ...defaultDocumentData,
