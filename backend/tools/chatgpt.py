@@ -54,7 +54,7 @@ class ChatGPTClient:
         Jeśli nie jesteś w stanie znaleźć jakiegoś tekstu, ponieważ jest na przykład nieczytelny, zwróć pustą odpowiedź. 
         Zwróć następujące dane w formacie json:
         ```json
-        {
+        {{
             "czy_poszkodowany_jest_osobą_zgłaszającą": true/false,
             "data_wypadku": "Wartość z pola Data wypadku",
             "godzina_wypadku": "Wartość z pola Godzina wypadku",
@@ -72,7 +72,7 @@ class ChatGPTClient:
             "czy_maszyna_w_ewidencji": "Wartość bool z pola Czy maszyna, urządzenie zostało wpisane do ewidencji środków trwałych",
             "liczba_świadków": "Liczba świadków w sprawie (z wypełnionymi danymi)",
             "lista_załączników": []
-        }
+        }}
         ```
         
         
@@ -168,10 +168,10 @@ class ChatGPTClient:
         Zwróć informację w postaci json:
         
         ```json
-            {   
+            {{
                 "wartosc_pola": "Nowa wartość aktualnie edytowanego przez użytkownika pola (jeśli jest gotowe)"
                 "wiadomosc": "Wiadomość do użytkownika, która pomoże mu wypełnić pole (jeśli dane nie są pełne)"    
-            }
+            }}
         ```
         """
 
