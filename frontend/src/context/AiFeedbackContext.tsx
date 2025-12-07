@@ -49,13 +49,22 @@ type UseAiFeedbackReturn = AiFeedbackState & {
 	refresh: () => void;
 };
 
-export function useAiFeedback(fieldId: string, rawText: string | null | undefined): UseAiFeedbackReturn {
+interface UseAiFeedbackOptions {
+	metadata?: Record<string, unknown>;
+}
+
+export function useAiFeedback(
+	fieldId: string,
+	rawText: string | null | undefined,
+	options?: UseAiFeedbackOptions,
+): UseAiFeedbackReturn {
 	const context = useContext(AiFeedbackContext);
 	if (!context) {
 		throw new Error('useAiFeedback must be used within AiFeedbackProvider');
 	}
 
 	const { service, debounceMs } = context;
+	const metadata = options?.metadata;
 	const [state, setState] = useState<AiFeedbackState>(IDLE_STATE);
 	const debounceHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const requestIdRef = useRef(0);
@@ -79,7 +88,7 @@ export function useAiFeedback(fieldId: string, rawText: string | null | undefine
 		}));
 
 		service
-			.getFeedback({ fieldId, text: normalizedText })
+			.getFeedback({ fieldId, text: normalizedText, metadata })
 			.then((response) => {
 				if (requestIdRef.current !== currentRequestId) {
 					return;
@@ -95,7 +104,7 @@ export function useAiFeedback(fieldId: string, rawText: string | null | undefine
 				const message = error instanceof Error ? error.message : 'Nie udało się pobrać podpowiedzi.';
 				setState({ status: 'error', message: null, error: message });
 			});
-	}, [fieldId, normalizedText, service]);
+	}, [fieldId, metadata, normalizedText, service]);
 
 	useEffect(() => {
 		clearPendingTimeout();

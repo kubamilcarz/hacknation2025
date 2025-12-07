@@ -23,9 +23,9 @@ export function IncidentAiSuggestion({ title = "Podpowiedź AI", children, varia
         };
 
   return (
-    <div className={`space-y-2 rounded-xl border ${palette.border} ${palette.background} px-4 py-3 text-sm ${palette.text}`}>
-      <p className="font-semibold">{title}</p>
-      <div className="text-sm leading-6 text-foreground/80">{children}</div>
+    <div className={`space-y-2 rounded-xl border ${palette.border} ${palette.background} px-4 py-3 text-base ${palette.text}`}>
+      <p className="font-semibold text-foreground">{title}</p>
+      <div className="leading-6 text-foreground/90">{children}</div>
     </div>
   );
 }

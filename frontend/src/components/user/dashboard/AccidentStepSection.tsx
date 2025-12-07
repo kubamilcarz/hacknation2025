@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent } from 'react';
+import { useRef, type ChangeEvent, type ReactNode } from 'react';
 import { IncidentWizardSection } from '@/components/user/IncidentWizardSection';
 import { IncidentTextField } from '@/components/user/IncidentTextField';
 import { IncidentAiSuggestion } from '@/components/user/IncidentAiSuggestion';
@@ -8,6 +8,24 @@ import { useIncidentReport } from '@/context/IncidentReportContext';
 import { formatFileSize } from '@/lib/utils/formatFileSize';
 
 type AiFeedbackHookResult = ReturnType<typeof useAiFeedback>;
+
+const ACCIDENT_AI_FEEDBACK_FIELDS = {
+  accidentDetails: 'szczegoly_okolicznosci',
+  location: 'miejsce_wypadku',
+  injuries: 'rodzaj_urazow',
+  medicalHelpPlace: 'miejsce_udzielenia_pomocy',
+  authority: 'organ_postepowania',
+  machineDescription: 'opis_maszyn',
+} as const;
+
+const ACCIDENT_AI_FEEDBACK_METADATA = {
+  accidentDetails: { step: 'accident', field: 'details' },
+  location: { step: 'accident', field: 'location' },
+  injuries: { step: 'accident', field: 'injuries' },
+  medicalHelpPlace: { step: 'accident', field: 'medicalHelpPlace' },
+  authority: { step: 'accident', field: 'authority' },
+  machineDescription: { step: 'accident', field: 'machineDescription' },
+} as const;
 
 export function AccidentStepSection() {
   const {
@@ -144,63 +162,72 @@ export function AccidentStepSection() {
   const machineHasCertificate = incidentDraft.czy_maszyna_posiada_atest ?? null;
   const machineRegistered = incidentDraft.czy_maszyna_w_ewidencji ?? null;
 
-  const accidentDetailsFeedback = useAiFeedback('szczegoly_okolicznosci', incidentDraft.szczegoly_okolicznosci ?? '');
-  const locationFeedback = useAiFeedback('miejsce_wypadku', incidentDraft.miejsce_wypadku ?? '');
-  const injuriesFeedback = useAiFeedback('rodzaj_urazow', incidentDraft.rodzaj_urazow ?? '');
-  const medicalHelpPlaceFeedback = useAiFeedback(
-    'miejsce_udzielenia_pomocy',
-    medicalHelpProvided ? incidentDraft.miejsce_udzielenia_pomocy ?? '' : '',
+  const accidentDetailsFeedback = useAiFeedback(
+    ACCIDENT_AI_FEEDBACK_FIELDS.accidentDetails,
+    incidentDraft.szczegoly_okolicznosci ?? '',
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.accidentDetails },
   );
-  const authorityFeedback = useAiFeedback('organ_postepowania', incidentDraft.organ_postepowania ?? '');
-  const machineDescriptionFeedback = useAiFeedback('opis_maszyn', machineInvolved ? incidentDraft.opis_maszyn ?? '' : '');
+  const locationFeedback = useAiFeedback(
+    ACCIDENT_AI_FEEDBACK_FIELDS.location,
+    incidentDraft.miejsce_wypadku ?? '',
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.location },
+  );
+  const injuriesFeedback = useAiFeedback(
+    ACCIDENT_AI_FEEDBACK_FIELDS.injuries,
+    incidentDraft.rodzaj_urazow ?? '',
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.injuries },
+  );
+  const medicalHelpPlaceFeedback = useAiFeedback(
+    ACCIDENT_AI_FEEDBACK_FIELDS.medicalHelpPlace,
+    medicalHelpProvided ? incidentDraft.miejsce_udzielenia_pomocy ?? '' : '',
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.medicalHelpPlace },
+  );
+  const authorityFeedback = useAiFeedback(
+    ACCIDENT_AI_FEEDBACK_FIELDS.authority,
+    incidentDraft.organ_postepowania ?? '',
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.authority },
+  );
+  const machineDescriptionFeedback = useAiFeedback(
+    ACCIDENT_AI_FEEDBACK_FIELDS.machineDescription,
+    machineInvolved ? incidentDraft.opis_maszyn ?? '' : '',
+    { metadata: ACCIDENT_AI_FEEDBACK_METADATA.machineDescription },
+  );
 
-  const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult, fallbackHint: React.ReactNode) => {
+  const renderAiFeedbackMessage = (feedback: AiFeedbackHookResult, fallbackHint: ReactNode) => {
     if (feedback.isIdle) {
       return fallbackHint;
     }
 
     if (feedback.isError) {
       return (
-        <div className="rounded-md border border-dashed border-(--color-error) bg-(--color-error-soft) px-3 py-2 text-xs text-(--color-error)">
-          <div className="flex items-center justify-between gap-3">
-            <span>{feedback.error}</span>
-            <button
-              type="button"
-              onClick={feedback.refresh}
-              className="text-xs font-semibold text-(--color-error) underline underline-offset-2"
-            >
-              Spróbuj ponownie
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-3 text-(--color-error)">
+          <span>{feedback.error}</span>
+          <button
+            type="button"
+            onClick={feedback.refresh}
+            className="font-semibold text-(--color-error) underline underline-offset-2"
+          >
+            Spróbuj ponownie
+          </button>
         </div>
       );
     }
 
     if (feedback.isLoading) {
       return (
-        <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-secondary">
-          <span className="flex items-center gap-2">
-            <Spinner size={14} />
-            Generuję podpowiedź…
-          </span>
+        <div className="flex items-center gap-2 text-muted">
+          <Spinner size={16} />
+          Generuję podpowiedź…
         </div>
       );
     }
 
     if (feedback.isDebouncing) {
-      return (
-        <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-muted">
-          Analizuję wpis…
-        </div>
-      );
+      return <p className="text-muted">Analizuję wpis…</p>;
     }
 
     if (feedback.message) {
-      return (
-        <div className="rounded-md border border-dashed border-subtle bg-(--color-accent-soft) px-3 py-2 text-xs text-secondary">
-          {feedback.message}
-        </div>
-      );
+      return <p className="whitespace-pre-line leading-6 text-foreground">{feedback.message}</p>;
     }
 
     return fallbackHint;
