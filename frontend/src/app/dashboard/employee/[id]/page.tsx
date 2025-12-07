@@ -20,6 +20,33 @@ const DESCRIPTION_SOURCE_LABEL: Record<EmployeeDocument['descriptionSource'], st
   manual: 'Opis dodany ręcznie',
 };
 
+const ASSESSMENT_SECTIONS = [
+  { key: 'suddenness', label: 'Nagłość', helper: 'Czy zdarzenie nastąpiło w krótkim czasie.' },
+  { key: 'externalCause', label: 'Przyczyna zewnętrzna', helper: 'Czy wystąpił czynnik spoza organizmu.' },
+  { key: 'injury', label: 'Uraz', helper: 'Czy doszło do uszkodzenia ciała lub zdrowia.' },
+  { key: 'workRelation', label: 'Związek z pracą', helper: 'Czy zdarzenie pozostaje w związku z obowiązkami.' },
+] as const;
+
+type AssessmentSectionKey = (typeof ASSESSMENT_SECTIONS)[number]['key'];
+
+const STATUS_LABEL: Record<EmployeeDocument['assessment']['suddenness']['status'], string> = {
+  met: 'Spełniona',
+  partial: 'Niepełna',
+  unmet: 'Niespełniona',
+};
+
+function getAssessmentStatusClasses(status: EmployeeDocument['assessment']['suddenness']['status']) {
+  switch (status) {
+    case 'met':
+      return 'bg-(--color-success-soft) text-(--color-success) border-(--color-success)';
+    case 'partial':
+      return 'bg-(--color-warning-soft) text-(--color-warning) border-(--color-warning)';
+    case 'unmet':
+    default:
+      return 'bg-(--color-error-soft) text-(--color-error) border-(--color-error)';
+  }
+}
+
 function getStatusBadgeClasses(status: EmployeeDocument['analysisStatus']) {
   switch (status) {
     case 'completed':
@@ -50,7 +77,7 @@ function formatUploadDate(iso: string) {
 export default function DocumentDetail({ params }: DocumentDetailPageProps) {
   const router = useRouter();
   const documentId = Number.parseInt(params.id, 10);
-  const { isLoading, getDocumentById, downloadOriginalDocument } = useDocuments();
+  const { isLoading, getDocumentById, downloadOriginalDocument, downloadAnonymizedDocument } = useDocuments();
 
   const documentFromStore = useMemo(
     () => (Number.isNaN(documentId) ? undefined : getDocumentById(documentId)),
@@ -64,6 +91,9 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
 
   const documentData = documentFromStore ?? remoteDocument;
   const error = documentFromStore ? null : remoteError;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (documentFromStore || isLoading || Number.isNaN(documentId)) {
@@ -71,6 +101,7 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
     }
 
     let isCancelled = false;
+    let objectUrl: string | null = null;
 
     const fetchDocument = async () => {
       try {
@@ -99,6 +130,49 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
     };
   }, [documentFromStore, documentId, isLoading]);
 
+  useEffect(() => {
+    if (!documentData?.id) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsPreviewLoading(true);
+    setPreviewError(null);
+
+    const loadPreview = async () => {
+      try {
+        const blob = await employeeDocumentService.getOriginalFile(documentData.id!);
+        if (isCancelled) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      } catch (err) {
+        if (!isCancelled) {
+          console.error(err);
+          setPreviewError('Nie udało się wczytać podglądu PDF.');
+          setPreviewUrl(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsPreviewLoading(false);
+        }
+      }
+    };
+
+    void loadPreview();
+
+    return () => {
+      isCancelled = true;
+      setIsPreviewLoading(false);
+      setPreviewError(null);
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [documentData?.id]);
+
   const breadcrumbItems = useMemo(() => {
     if (documentData) {
       return [
@@ -125,15 +199,66 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
     }
   };
 
+  const handleDownloadAnonymized = async () => {
+    if (documentData?.id == null) {
+      return;
+    }
+
+    try {
+      await downloadAnonymizedDocument(documentData.id);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const metadataCards = documentData
     ? [
         { label: 'ID dokumentu', value: documentData.id != null ? `#${documentData.id}` : 'Brak danych' },
         { label: 'Rozmiar pliku', value: formatFileSize(documentData.fileSize) },
-        { label: 'Data przesłania', value: formatUploadDate(documentData.uploadedAt) },
         { label: 'Status analizy', value: formatStatus(documentData.analysisStatus) },
         { label: 'Źródło opisu', value: DESCRIPTION_SOURCE_LABEL[documentData.descriptionSource] ?? 'Brak danych' },
       ]
     : [];
+
+  const resolveAssessmentEntry = (key: AssessmentSectionKey) => {
+    if (!documentData) {
+      return null;
+    }
+    const assessment = documentData.assessment;
+    switch (key) {
+      case 'suddenness':
+        return assessment.suddenness;
+      case 'externalCause':
+        return assessment.externalCause;
+      case 'injury':
+        return assessment.injury;
+      case 'workRelation':
+        return assessment.workRelation;
+      default:
+        return null;
+    }
+  };
+
+  const renderAssessmentAction = (status: EmployeeDocument['assessment']['suddenness']['status'], recommendation?: string) => {
+    if (status === 'met') {
+      return (
+        <button
+          type="button"
+          onClick={handleDownloadAnonymized}
+          className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-3 py-1.5 text-xs font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+        >
+          Pobierz zanonimizowany PDF
+        </button>
+      );
+    }
+
+    return (
+      <div className="rounded-md border border-dashed border-subtle bg-surface px-3 py-2 text-xs text-secondary">
+        <p className="font-semibold text-primary">Proponowana wiadomość do klienta:</p>
+        <p className="mt-1 leading-relaxed">{recommendation ?? 'Poproś o uzupełnienie brakujących informacji.'}</p>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-app py-8">
@@ -141,17 +266,35 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
         <div className="rounded-xl border border-subtle bg-surface p-8 shadow-card">
           <div className="mb-8 flex flex-col gap-4">
             <Breadcrumbs items={breadcrumbItems} />
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h1 className="text-3xl font-semibold text-primary">
-                {documentData ? documentData.fileName : 'Dokument'}
-              </h1>
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard/employee')}
-                className="inline-flex items-center justify-center rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground"
-              >
-                Wróć do listy
-              </button>
+            <div className="rounded-xl border border-subtle bg-surface-subdued px-5 py-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Dokument #{documentData?.id ?? '—'}</p>
+                  <h1 className="mt-1 text-2xl font-semibold text-primary">{documentData?.fileName ?? 'Dokument'}</h1>
+                  {documentData && (
+                    <p className="text-sm text-muted">Przesłano {formatUploadDate(documentData.uploadedAt)}</p>
+                  )}
+                  <p className="mt-3 text-sm text-primary">
+                    {documentData?.incidentDescription ?? 'Opis zdarzenia pojawi się po zakończeniu analizy.'}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:items-end">
+                  {documentData && (
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(documentData.analysisStatus)}`}
+                    >
+                      {formatStatus(documentData.analysisStatus)}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => router.push('/dashboard/employee')}
+                    className="inline-flex items-center justify-center rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground"
+                  >
+                    Wróć do listy
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -169,30 +312,62 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
 
           {documentData && (
             <div className="space-y-8">
+              <section>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Ocena przesłanek</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  {ASSESSMENT_SECTIONS.map((section) => {
+                    const entry = resolveAssessmentEntry(section.key);
+                    if (!entry) {
+                      return null;
+                    }
+
+                    return (
+                      <div key={section.key} className="rounded-xl border border-subtle bg-surface px-5 py-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{section.label}</p>
+                            <p className="mt-2 text-sm text-secondary">{section.helper}</p>
+                          </div>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getAssessmentStatusClasses(entry.status)}`}
+                          >
+                            {STATUS_LABEL[entry.status]}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm text-primary">{entry.summary}</p>
+                        <div className="mt-4">
+                          {renderAssessmentAction(entry.status, entry.recommendation)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
               <section className="rounded-xl border border-subtle bg-surface-subdued px-6 py-5">
-                <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Nazwa pliku</p>
-                    <p className="mt-1 text-2xl font-semibold text-primary">{documentData.fileName}</p>
-                    <p className="mt-2 text-sm text-muted">
-                      Przesłano {formatUploadDate(documentData.uploadedAt)}
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Plik źródłowy</p>
+                    <p className="mt-1 text-base font-semibold text-primary">{documentData.fileName}</p>
+                    <p className="text-sm text-muted">
+                      {formatFileSize(documentData.fileSize)} • {documentData.fileType || 'application/pdf'}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-3 sm:items-end">
-                    <span
-                      className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(documentData.analysisStatus)}`}
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
                     >
-                      {formatStatus(documentData.analysisStatus)}
-                    </span>
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={handleDownload}
-                        className="inline-flex items-center justify-center gap-2 rounded-md border border-subtle px-4 py-2 text-sm font-semibold text-secondary transition hover:border-(--color-border-stronger) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
-                      >
-                        Pobierz PDF
-                      </button>
-                    </div>
+                      Pobierz oryginał
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadAnonymized}
+                      className="inline-flex items-center justify-center gap-2 rounded-md border border-(--color-accent) px-4 py-2 text-sm font-semibold text-(--color-accent) transition hover:border-(--color-accent-strong) hover:text-(--color-accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2"
+                    >
+                      Pobierz zanonimizowany
+                    </button>
                   </div>
                 </div>
               </section>
@@ -206,18 +381,30 @@ export default function DocumentDetail({ params }: DocumentDetailPageProps) {
                 ))}
               </section>
 
-              <section>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted">Opis zdarzenia</p>
-                    <h2 className="text-xl font-semibold text-primary">Podsumowanie analizy</h2>
+              <section className="rounded-xl border border-dashed border-subtle bg-surface-subdued px-6 py-5">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-primary">Podgląd PDF</p>
+                    {isPreviewLoading && <span className="text-xs text-muted">Ładowanie pliku…</span>}
                   </div>
-                  <span className="text-xs font-medium text-muted">
-                    {DESCRIPTION_SOURCE_LABEL[documentData.descriptionSource] ?? 'Brak informacji'}
-                  </span>
-                </div>
-                <div className="mt-4 rounded-xl border border-subtle bg-surface-subdued px-5 py-4 text-sm leading-relaxed text-primary">
-                  {documentData.incidentDescription || 'Brak szczegółowego opisu zdarzenia.'}
+                  {previewError && <p className="text-xs text-error">{previewError}</p>}
+                  {previewUrl ? (
+                    <object
+                      data={previewUrl}
+                      type="application/pdf"
+                      className="h-[32rem] w-full rounded-lg border border-subtle bg-surface"
+                    >
+                      <p className="p-4 text-sm text-muted">
+                        Ten przeglądarka nie obsługuje podglądu PDF. Pobierz dokument, aby go otworzyć.
+                      </p>
+                    </object>
+                  ) : (
+                    !isPreviewLoading && !previewError && (
+                      <div className="flex h-48 items-center justify-center rounded-lg border border-subtle bg-surface text-sm text-muted">
+                        Podgląd będzie dostępny po ukończeniu analizy.
+                      </div>
+                    )
+                  )}
                 </div>
               </section>
             </div>

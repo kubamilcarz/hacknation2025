@@ -41,6 +41,35 @@ const EXPORT_FILE_PREFIX = "dokumenty-pracownicze";
 const NETWORK_DELAY_MS = 400;
 const PDF_FONT_NAME = "Inter";
 const PDF_FONT_BASE_PATH = "/fonts";
+const PDF_EXPORT_TARGET_SELECTOR = "[data-export-pdf-target='employee-documents-table']";
+
+type ExportStyleProperty = Extract<keyof CSSStyleDeclaration, string>;
+
+type StyleOverride = {
+  selector: string;
+  includeRoot?: boolean;
+  styles: Partial<Record<ExportStyleProperty, string>>;
+};
+
+const PDF_EXPORT_STYLE_OVERRIDES: StyleOverride[] = [
+  {
+    selector: "[data-export-pdf-relax-overflow]",
+    styles: {
+      overflow: "visible",
+      overflowX: "visible",
+      overflowY: "visible",
+      maxHeight: "none",
+    },
+  },
+  {
+    selector: "[data-export-pdf-relax-width]",
+    styles: {
+      width: "max-content",
+      minWidth: "0",
+      maxWidth: "none",
+    },
+  },
+];
 
 type PdfFontVariant = { file: string; style: "normal" | "bold" };
 
@@ -77,6 +106,9 @@ export interface EmployeeDocumentService {
   getById(id: number): Promise<EmployeeDocument | null>;
   upload(file: File): Promise<EmployeeDocument>;
   downloadOriginal(id: number): Promise<void>;
+  downloadAnonymized(id: number): Promise<void>;
+  getOriginalFile(id: number): Promise<Blob>;
+  getAnonymizedFile(id: number): Promise<Blob>;
   setExportFormat(format: EmployeeDocumentExportFormat): void;
 }
 
@@ -85,6 +117,7 @@ interface EmployeeDocumentApi {
   getById(id: number): Promise<EmployeeDocumentDetailDto | null>;
   upload(payload: CreateEmployeeDocumentDto, fileData: Blob): Promise<EmployeeDocumentDetailDto>;
   downloadOriginal(id: number): Promise<Blob>;
+  downloadAnonymized(id: number): Promise<Blob>;
   setExportFormat(format: EmployeeDocumentExportFormat): void;
 }
 
@@ -120,6 +153,23 @@ class DefaultEmployeeDocumentService implements EmployeeDocumentService {
   async downloadOriginal(id: number): Promise<void> {
     const blob = await this.api.downloadOriginal(id);
     downloadBlobWithName(blob, await this.resolveFileName(id));
+  }
+
+  async downloadAnonymized(id: number): Promise<void> {
+    const blob = await this.api.downloadAnonymized(id);
+    const base = await this.resolveFileName(id);
+    const anonymizedName = base.toLowerCase().endsWith(".pdf")
+      ? `${base.slice(0, -4)}-anon.pdf`
+      : `${base}-anon.pdf`;
+    downloadBlobWithName(blob, anonymizedName);
+  }
+
+  async getOriginalFile(id: number): Promise<Blob> {
+    return this.api.downloadOriginal(id);
+  }
+
+  async getAnonymizedFile(id: number): Promise<Blob> {
+    return this.api.downloadAnonymized(id);
   }
 
   private async resolveFileName(id: number): Promise<string> {
@@ -257,6 +307,16 @@ class MockEmployeeDocumentApi implements EmployeeDocumentApi {
       throw new Error("Nie znaleziono pliku źródłowego.");
     }
     return blob;
+  }
+
+  async downloadAnonymized(id: number): Promise<Blob> {
+    await delay();
+    const dto = this.documents.find((document) => document.id === id);
+    if (!dto) {
+      throw new Error("Nie znaleziono dokumentu do anonimizacji.");
+    }
+    const domainDocument = mapEmployeeDocumentDetailDtoToDomain(dto);
+    return createAnonymizedPdf(domainDocument);
   }
 
   private handleExport(format: EmployeeDocumentExportFormat, documents: EmployeeDocument[]) {
@@ -403,6 +463,14 @@ function createMockPdfBlob(content: string) {
 async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDocumentDto> {
   const now = new Date().toISOString();
   const description = await mockAnalyzePdf(file);
+  const defaultRecommendation =
+    "System analizuje dokument. W razie potrzeby poproś klienta o doprecyzowanie opisanej przesłanki.";
+  const defaultAssessmentEntry = (summary: string) => ({
+    status: "partial" as const,
+    summary,
+    recommendation: defaultRecommendation,
+  });
+
   return {
     file_name: file.name || `dokument-${now}.pdf`,
     file_size: file.size,
@@ -410,8 +478,14 @@ async function buildCreatePayloadFromFile(file: File): Promise<CreateEmployeeDoc
     storage_url: "pending",
     uploaded_at: now,
     incident_description: description,
-    analysis_status: "completed",
+    analysis_status: "processing",
     description_source: "ai",
+    assessment: {
+      suddenness: defaultAssessmentEntry("Nagłość zostanie potwierdzona po pełnej analizie logów."),
+      external_cause: defaultAssessmentEntry("System sprawdza wskazane czynniki zewnętrzne."),
+      injury: defaultAssessmentEntry("Wymagane potwierdzenie urazu na podstawie dalszych danych."),
+      work_relation: defaultAssessmentEntry("Analiza zależności ze stanowiskiem pracy w toku."),
+    },
   };
 }
 
@@ -479,10 +553,102 @@ function downloadPdf(items: EmployeeDocument[]) {
     return;
   }
   void (async () => {
+    const exportRoot = document.querySelector<HTMLElement>(PDF_EXPORT_TARGET_SELECTOR);
+    if (exportRoot) {
+      try {
+        const [{ jsPDF }, html2canvasModule] = await Promise.all([import("jspdf"), import("html2canvas")]);
+        const html2canvas = html2canvasModule.default ?? html2canvasModule;
+        const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+        const revertStyles = applyPdfSnapshotOverrides(exportRoot);
+        try {
+          const backgroundColor = getComputedStyle(document.body).backgroundColor || "#ffffff";
+          const snapshotWidth = Math.max(exportRoot.scrollWidth, exportRoot.offsetWidth, 1);
+          const snapshotHeight = Math.max(exportRoot.scrollHeight, exportRoot.offsetHeight, 1);
+          const canvas = await html2canvas(exportRoot, {
+            backgroundColor,
+            scale,
+            useCORS: true,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: snapshotWidth,
+            windowHeight: snapshotHeight,
+            width: snapshotWidth,
+            height: snapshotHeight,
+          });
+          const imageData = canvas.toDataURL("image/png", 0.95);
+          const contentWidthPt = pxToPt(canvas.width);
+          const contentHeightPt = pxToPt(canvas.height);
+          const marginPt = 24;
+          const pageWidthPt = contentWidthPt + marginPt * 2;
+          const pageHeightPt = contentHeightPt + marginPt * 2;
+          const doc = new jsPDF({
+            orientation: contentWidthPt >= contentHeightPt ? "landscape" : "portrait",
+            unit: "pt",
+            format: [pageWidthPt, pageHeightPt],
+          });
+          doc.addImage(imageData, "PNG", marginPt, marginPt, contentWidthPt, contentHeightPt, undefined, "FAST");
+          doc.save(`${EXPORT_FILE_PREFIX}-${new Date().toISOString().slice(0, 10)}.pdf`);
+          return;
+        } finally {
+          revertStyles();
+        }
+      } catch (snapshotError) {
+        console.error("Snapshot PDF export failed, falling back to table export.", snapshotError);
+      }
+    } else {
+      console.warn("PDF export target not found, using table fallback.");
+    }
+
+    await downloadPdfTableFallback(items);
+  })();
+}
+
+function applyPdfSnapshotOverrides(root: HTMLElement) {
+  if (!root) {
+    return () => undefined;
+  }
+
+  type AppliedStyle = { element: HTMLElement; property: ExportStyleProperty; previous: string };
+  const applied: AppliedStyle[] = [];
+
+  for (const override of PDF_EXPORT_STYLE_OVERRIDES) {
+    const matchedElements: HTMLElement[] = [];
+    if (override.includeRoot && root.matches(override.selector)) {
+      matchedElements.push(root);
+    }
+    matchedElements.push(...Array.from(root.querySelectorAll<HTMLElement>(override.selector)));
+
+    for (const element of matchedElements) {
+      const styleEntries = Object.entries(override.styles ?? {}) as Array<[ExportStyleProperty, string | undefined]>;
+      for (const [property, value] of styleEntries) {
+        if (value == null) {
+          continue;
+        }
+        const style = element.style as Record<string, string>;
+        const previous = style[property] ?? "";
+        if (previous === value) {
+          continue;
+        }
+        applied.push({ element, property, previous });
+        style[property] = value;
+      }
+    }
+  }
+
+  return () => {
+    for (let index = applied.length - 1; index >= 0; index -= 1) {
+      const { element, property, previous } = applied[index];
+      (element.style as Record<string, string>)[property] = previous;
+    }
+  };
+}
+
+async function downloadPdfTableFallback(items: EmployeeDocument[]) {
+  try {
     const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
     const autoTable = autoTableModule.default;
     if (!autoTable) {
-      return;
+      throw new Error("jspdf-autotable module is not available");
     }
     const doc = new jsPDF({ orientation: "landscape", unit: "pt" });
     await ensurePdfFont(doc);
@@ -493,14 +659,14 @@ function downloadPdf(items: EmployeeDocument[]) {
         : [
             PDF_TABLE_COLUMNS.map((_, index) => (index === 0 ? "Brak dokumentów w bieżącym widoku." : "")),
           ];
-    const margin = { top: 48, bottom: 40, left: 48, right: 48 };
+    const margin = { top: 48, bottom: 40, left: 48, right: 48 } as const;
     const availableWidth = doc.internal.pageSize.getWidth() - margin.left - margin.right;
     const totalHint = PDF_TABLE_COLUMNS.reduce((sum, column) => sum + (column.lengthHint ?? 20), 0);
     const columnStyles = PDF_TABLE_COLUMNS.reduce<Record<number, { cellWidth: number; overflow: "linebreak" }>>(
-      (acc, column, index) => {
+      (accumulator, column, index) => {
         const width = ((column.lengthHint ?? 20) / totalHint) * availableWidth;
-        acc[index] = { cellWidth: Math.max(width, 80), overflow: "linebreak" };
-        return acc;
+        accumulator[index] = { cellWidth: Math.max(width, 80), overflow: "linebreak" };
+        return accumulator;
       },
       {}
     );
@@ -515,7 +681,46 @@ function downloadPdf(items: EmployeeDocument[]) {
       tableWidth: availableWidth,
     });
     doc.save(`${EXPORT_FILE_PREFIX}-${new Date().toISOString().slice(0, 10)}.pdf`);
-  })();
+  } catch (fallbackError) {
+    console.error("Table-based PDF export failed.", fallbackError);
+  }
+}
+
+function pxToPt(value: number) {
+  return (value * 72) / 96;
+}
+
+async function createAnonymizedPdf(document: EmployeeDocument): Promise<Blob> {
+  if (typeof window === "undefined") {
+    return new Blob();
+  }
+
+  const [{ jsPDF }] = await Promise.all([import("jspdf")]);
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt" });
+  await ensurePdfFont(doc);
+
+  const margin = 48;
+  const width = doc.internal.pageSize.getWidth() - margin * 2;
+  doc.setFontSize(14);
+  doc.setTextColor(16, 61, 122);
+  doc.text("Zanonimizowany opis zdarzenia", margin, margin);
+
+  doc.setFontSize(11);
+  doc.setTextColor(28, 35, 51);
+  const issuedAt = formatDate(document.uploadedAt);
+  doc.text(`Data przesłania: ${issuedAt}`, margin, margin + 24);
+  doc.text(`ID dokumentu: ${document.id ?? "Brak"}`, margin, margin + 40);
+
+  const description = document.incidentDescription || "Brak szczegółowego opisu.";
+  const lines = doc.splitTextToSize(description, width);
+  doc.text("\nOpis zdarzenia:", margin, margin + 68);
+  doc.text(lines, margin, margin + 92);
+
+  doc.setFontSize(10);
+  doc.setTextColor(120, 128, 146);
+  doc.text("Plik wygenerowany automatycznie na potrzeby anonimizacji.", margin, doc.internal.pageSize.getHeight() - margin);
+
+  return doc.output("blob");
 }
 
 function downloadBlob(blob: Blob, extension: string) {

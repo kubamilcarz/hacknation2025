@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "html2canvas": "^1.4.1",
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
     "next": "16.0.7",

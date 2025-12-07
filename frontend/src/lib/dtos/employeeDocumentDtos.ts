@@ -10,6 +10,18 @@ export interface EmployeeDocumentListItemDto {
   incident_description: string;
   analysis_status: EmployeeDocumentAnalysisStatusDto;
   description_source: "ai" | "manual";
+  assessment: {
+    suddenness: EmployeeDocumentAssessmentEntryDto;
+    external_cause: EmployeeDocumentAssessmentEntryDto;
+    injury: EmployeeDocumentAssessmentEntryDto;
+    work_relation: EmployeeDocumentAssessmentEntryDto;
+  };
+}
+
+export interface EmployeeDocumentAssessmentEntryDto {
+  status: "met" | "partial" | "unmet";
+  summary: string;
+  recommendation?: string;
 }
 
 export type EmployeeDocumentDetailDto = EmployeeDocumentListItemDto;
@@ -31,4 +43,10 @@ export interface CreateEmployeeDocumentDto {
   incident_description: string;
   analysis_status: EmployeeDocumentAnalysisStatusDto;
   description_source: "ai" | "manual";
+  assessment: {
+    suddenness: EmployeeDocumentAssessmentEntryDto;
+    external_cause: EmployeeDocumentAssessmentEntryDto;
+    injury: EmployeeDocumentAssessmentEntryDto;
+    work_relation: EmployeeDocumentAssessmentEntryDto;
+  };
 }

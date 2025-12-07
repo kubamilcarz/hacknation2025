@@ -461,7 +461,7 @@ export default function EmployeeDocumentsTable({
   })();
 
   return (
-    <>
+    <div data-export-pdf-target="employee-documents-table">
       <div className="mb-4 flex items-center gap-3 text-sm text-muted">
         {summaryMessage && <span>{summaryMessage}</span>}
       </div>
@@ -472,9 +472,13 @@ export default function EmployeeDocumentsTable({
             <span className="text-sm text-secondary">Aktualizuję dane…</span>
           </div>
         )}
-        <div className={isFallbackState ? "overflow-hidden" : "overflow-x-auto"}>
+        <div
+          className={isFallbackState ? "overflow-hidden" : "overflow-x-auto"}
+          data-export-pdf-relax-overflow
+        >
           <table
             className={`w-full divide-y divide-subtle text-sm ${isFallbackState ? "table-fixed" : ""}`}
+            data-export-pdf-relax-width
             style={
               isFallbackState
                 ? undefined
@@ -645,6 +649,6 @@ export default function EmployeeDocumentsTable({
       {totalCount > 0 && (
         <Pagination className="mt-6" currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
       )}
-    </>
+    </div>
   );
 }

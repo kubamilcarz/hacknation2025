@@ -2,8 +2,9 @@ import type {
   CreateEmployeeDocumentDto,
   EmployeeDocumentDetailDto,
   EmployeeDocumentListItemDto,
+  EmployeeDocumentAssessmentEntryDto,
 } from "@/lib/dtos/employeeDocumentDtos";
-import type { EmployeeDocument } from "@/types/employeeDocument";
+import type { EmployeeDocument, EmployeeDocumentAssessmentEntry } from "@/types/employeeDocument";
 
 export function mapEmployeeDocumentDetailDtoToDomain(dto: EmployeeDocumentDetailDto): EmployeeDocument {
   return {
@@ -16,6 +17,7 @@ export function mapEmployeeDocumentDetailDtoToDomain(dto: EmployeeDocumentDetail
     incidentDescription: dto.incident_description,
     analysisStatus: dto.analysis_status,
     descriptionSource: dto.description_source,
+    assessment: mapAssessmentDtoToDomain(dto.assessment),
   };
 }
 
@@ -34,6 +36,7 @@ export function mapEmployeeDocumentToDetailDto(document: EmployeeDocument): Empl
     incident_description: document.incidentDescription,
     analysis_status: document.analysisStatus,
     description_source: document.descriptionSource,
+    assessment: mapAssessmentDomainToDto(document.assessment),
   };
 }
 
@@ -48,5 +51,40 @@ export function mapCreateEmployeeDocumentDtoToDomain(dto: CreateEmployeeDocument
     incidentDescription: dto.incident_description,
     analysisStatus: dto.analysis_status,
     descriptionSource: dto.description_source,
+    assessment: mapAssessmentDtoToDomain(dto.assessment),
+  };
+}
+
+function mapAssessmentDtoToDomain(dto: EmployeeDocumentDetailDto["assessment"]): EmployeeDocument["assessment"] {
+  return {
+    suddenness: mapAssessmentEntryDto(dto.suddenness),
+    externalCause: mapAssessmentEntryDto(dto.external_cause),
+    injury: mapAssessmentEntryDto(dto.injury),
+    workRelation: mapAssessmentEntryDto(dto.work_relation),
+  };
+}
+
+function mapAssessmentEntryDto(entry: EmployeeDocumentAssessmentEntryDto): EmployeeDocumentAssessmentEntry {
+  return {
+    status: entry.status,
+    summary: entry.summary,
+    recommendation: entry.recommendation,
+  };
+}
+
+function mapAssessmentDomainToDto(assessment: EmployeeDocument["assessment"]): EmployeeDocumentDetailDto["assessment"] {
+  return {
+    suddenness: mapAssessmentEntryToDto(assessment.suddenness),
+    external_cause: mapAssessmentEntryToDto(assessment.externalCause),
+    injury: mapAssessmentEntryToDto(assessment.injury),
+    work_relation: mapAssessmentEntryToDto(assessment.workRelation),
+  };
+}
+
+function mapAssessmentEntryToDto(entry: EmployeeDocumentAssessmentEntry): EmployeeDocumentAssessmentEntryDto {
+  return {
+    status: entry.status,
+    summary: entry.summary,
+    recommendation: entry.recommendation,
   };
 }
