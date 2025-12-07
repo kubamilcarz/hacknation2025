@@ -273,7 +273,7 @@ export function AccidentStepSection() {
             optional
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             label="Miejsce wypadku"
             name="miejsce_wypadku"
@@ -296,7 +296,7 @@ export function AccidentStepSection() {
             </IncidentAiSuggestion>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             component="textarea"
             label="Rodzaj doznanych urazów"
@@ -330,7 +330,7 @@ export function AccidentStepSection() {
         >
           <span>Co dokładnie się stało?</span>
         </label>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             component="textarea"
             label="Co dokładnie się stało?"
@@ -371,7 +371,7 @@ export function AccidentStepSection() {
           { label: 'Nie', value: false },
         ])}
         {medicalHelpProvided && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <IncidentTextField
               label="Gdzie udzielono pomocy?"
               name="miejsce_udzielenia_pomocy"
@@ -398,7 +398,7 @@ export function AccidentStepSection() {
       </div>
 
       <div className="md:col-span-2">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <IncidentTextField
             component="textarea"
             label="Organ prowadzący postępowanie"
@@ -436,7 +436,7 @@ export function AccidentStepSection() {
         ])}
         {machineInvolved && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <IncidentTextField
                 component="textarea"
                 label="Jaka maszyna lub urządzenie brały udział?"

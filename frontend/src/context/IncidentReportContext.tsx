@@ -375,7 +375,7 @@ type IncidentReportContextValue = {
   submitError: string | null;
   submittedDocumentId: number | null;
   activeWitnessIndex: number | null;
-  downloadState: 'idle' | 'docx' | 'pdf';
+  downloadState: 'idle' | 'pdf';
   witnesses: CreateDocumentInput['witnesses'];
   witnessStatements: UploadedAttachment[];
   medicalDocuments: UploadedAttachment[];
@@ -404,7 +404,7 @@ type IncidentReportContextValue = {
   handleAdditionalAttachmentRemove: (id: string) => void;
   handleLegalNoticeAttachmentUpload: (files: FileList | File[] | null) => void;
   handleLegalNoticeAttachmentRemove: (id: string) => void;
-  handleDownload: (format: 'docx' | 'pdf') => Promise<void>;
+  handleDownload: (format: 'pdf') => Promise<void>;
 };
 
 const IncidentReportContext = createContext<IncidentReportContextValue | undefined>(undefined);
@@ -428,7 +428,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedDocumentId, setSubmittedDocumentId] = useState<number | null>(null);
   const [activeWitnessIndex, setActiveWitnessIndex] = useState<number | null>(null);
-  const [downloadState, setDownloadState] = useState<'idle' | 'docx' | 'pdf'>('idle');
+  const [downloadState, setDownloadState] = useState<'idle' | 'pdf'>('idle');
   const [witnessStatements, setWitnessStatements] = useState<UploadedAttachment[]>([]);
   const [medicalDocuments, setMedicalDocuments] = useState<UploadedAttachment[]>([]);
   const [additionalAttachments, setAdditionalAttachments] = useState<UploadedAttachment[]>([]);
@@ -829,7 +829,7 @@ export function IncidentReportProvider({ children }: { children: ReactNode }) {
     }
   }, [incidentDraft, submitState]);
 
-  const handleDownload = useCallback(async (format: 'docx' | 'pdf') => {
+  const handleDownload = useCallback(async (format: 'pdf') => {
     if (submittedDocumentId == null || !preparedDocument) {
       setSubmitError('Najpierw przygotuj formularz, a potem spróbuj pobrania ponownie.');
       return;

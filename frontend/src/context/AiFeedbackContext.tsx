@@ -70,6 +70,8 @@ export function useAiFeedback(
 	const [state, setState] = useState<AiFeedbackState>(IDLE_STATE);
 	const debounceHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const requestIdRef = useRef(0);
+	const latestPayloadRef = useRef({ fieldId, metadata, contextPayload, normalizedText: '' });
+	const previousTextRef = useRef<string | null>(null);
 	const normalizedText = rawText?.trim() ?? '';
 
 	const clearPendingTimeout = useCallback(() => {
@@ -79,7 +81,23 @@ export function useAiFeedback(
 		}
 	}, []);
 
+	useEffect(() => {
+		latestPayloadRef.current = {
+			fieldId,
+			metadata,
+			contextPayload,
+			normalizedText,
+		};
+	}, [fieldId, metadata, contextPayload, normalizedText]);
+
 	const triggerRequest = useCallback(() => {
+		const { fieldId: activeField, metadata: activeMetadata, contextPayload: activeContext, normalizedText: text } =
+			latestPayloadRef.current;
+		if (!text) {
+			setState(IDLE_STATE);
+			return;
+		}
+
 		const currentRequestId = requestIdRef.current + 1;
 		requestIdRef.current = currentRequestId;
 
@@ -90,7 +108,7 @@ export function useAiFeedback(
 		}));
 
 		service
-			.getFeedback({ fieldId, text: normalizedText, metadata, context: contextPayload })
+			.getFeedback({ fieldId: activeField, text, metadata: activeMetadata, context: activeContext })
 			.then((response) => {
 				if (requestIdRef.current !== currentRequestId) {
 					return;
@@ -106,9 +124,16 @@ export function useAiFeedback(
 				const message = error instanceof Error ? error.message : 'Nie udało się pobrać podpowiedzi.';
 				setState({ status: 'error', message: null, error: message });
 			});
-	}, [contextPayload, fieldId, metadata, normalizedText, service]);
+	}, [service]);
 
 	useEffect(() => {
+		if (previousTextRef.current === normalizedText) {
+			return () => {
+				clearPendingTimeout();
+			};
+		}
+		previousTextRef.current = normalizedText;
+
 		clearPendingTimeout();
 
 		if (!normalizedText) {
@@ -139,7 +164,8 @@ export function useAiFeedback(
 
 	const refresh = () => {
 		clearPendingTimeout();
-		if (!normalizedText) {
+		const { normalizedText: text } = latestPayloadRef.current;
+		if (!text) {
 			setState(IDLE_STATE);
 			return;
 		}
